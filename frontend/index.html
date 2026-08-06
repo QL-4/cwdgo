@@ -7,13 +7,34 @@
 </head>
 <body>
 <div id="app">
-    <input id="search" type="text" placeholder="搜索或输入完整路径…"
-           autocomplete="off" spellcheck="false"/>
-    <div id="empty" class="empty hidden">
-        <div class="empty-title" id="empty-title"></div>
-        <div class="empty-hint" id="empty-hint"></div>
+    <!-- Launcher panel view -->
+    <div id="panel">
+        <input id="search" type="text" placeholder="搜索或输入完整路径…"
+               autocomplete="off" spellcheck="false"/>
+        <div id="empty" class="empty hidden">
+            <div class="empty-title" id="empty-title"></div>
+            <div class="empty-hint" id="empty-hint"></div>
+        </div>
+        <ul id="results"></ul>
     </div>
-    <ul id="results"></ul>
+
+    <!-- Settings view -->
+    <div id="settings" class="hidden">
+        <div class="settings-header">
+            <button id="back" type="button" class="link">‹ 返回面板</button>
+            <h2>设置</h2>
+        </div>
+        <label class="field">
+            <span class="label-text">历史上限</span>
+            <input id="history-limit" type="text" inputmode="numeric" pattern="[0-9]*"
+                   autocomplete="off"/>
+        </label>
+        <label class="field row">
+            <span class="label-text">开机自启</span>
+            <input id="autostart" type="checkbox"/>
+        </label>
+        <div id="settings-msg" class="msg hidden"></div>
+    </div>
 </div>
 <script src="./src/main.js" type="module"></script>
 </body>

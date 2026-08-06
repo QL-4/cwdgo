@@ -12,6 +12,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 
 	"cwdgo/domain/recentfolders"
+	"cwdgo/domain/settings"
 	"cwdgo/internal/applog"
 	"cwdgo/internal/hotkey"
 	"cwdgo/internal/launcher"
@@ -24,14 +25,20 @@ var assets embed.FS
 
 func main() {
 	applog.Log("cwdgo starting")
+	hist := settings.New(settingsPath())
 	store := recentfolders.New(historyPath())
+	// Apply the persisted history cap at startup (defaults to 50 until the
+	// user changes it in settings).
+	if err := store.SetLimit(hist.Get().HistoryLimit); err != nil {
+		applog.Log("settings: apply history limit at startup: %v", err)
+	}
 	software := defaultSoftware()
 	p := panel.New()
-	app := NewApp(store, launcher.OSLauncher{}, software, p)
+	app := NewApp(store, hist, launcher.OSLauncher{}, software, p)
 
 	// Tray runs on its own OS thread; the Wails main loop owns the main
 	// thread. Exiting via the tray menu quits the whole process.
-	tray.Run(p.Open, app.Quit)
+	tray.Run(p.Open, p.OpenSettings, app.Quit)
 
 	// Global Launcher Hotkey: default Alt+X. If the OS rejects it (e.g. it
 	// is taken by another program) show a readable message and keep running
@@ -81,6 +88,16 @@ func historyPath() string {
 		dir = os.TempDir()
 	}
 	return filepath.Join(dir, "cwdgo", "history.json")
+}
+
+// settingsPath returns the JSON file that persists Settings:
+// %APPDATA%\cwdgo\settings.json.
+func settingsPath() string {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		dir = os.TempDir()
+	}
+	return filepath.Join(dir, "cwdgo", "settings.json")
 }
 
 // fileLogger routes Wails log output (including frontend LogDebug calls)

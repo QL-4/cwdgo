@@ -135,3 +135,90 @@ html, body {
 .empty-hint {
     font-size: 13px;
 }
+
+/* Generic hidden helper (views, messages). */
+.hidden {
+    display: none !important;
+}
+
+/* --- Settings view --- */
+#panel,
+#settings {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    gap: 12px;
+    min-height: 0;
+}
+
+.settings-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.settings-header h2 {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.link {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 13px;
+    cursor: pointer;
+    padding: 2px 4px;
+}
+
+.link:hover {
+    color: var(--text);
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+}
+
+.field.row {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+}
+
+.field .label-text {
+    color: var(--muted);
+}
+
+#history-limit {
+    width: 100%;
+    padding: 8px 12px;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    outline: none;
+    font-size: 14px;
+}
+
+#history-limit:focus {
+    border-color: var(--accent);
+}
+
+#autostart {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.msg {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.msg.error {
+    color: #e57373;
+}

@@ -68,29 +68,57 @@ func (c *Controller) SetContext(ctx context.Context) {
 }
 
 // Open is the Launcher Hotkey / tray action. If the panel is already
-// visible it is hidden (toggle); otherwise it is positioned centred on the
-// monitor under the mouse cursor, shown, brought to the foreground and the
-// «panel-opened» event is emitted so the frontend focuses the search box.
-// Safe to call from any goroutine.
+// visible it is hidden (toggle); otherwise it is shown (centred on the
+// monitor under the mouse) and the «panel-opened» event is emitted so the
+// frontend focuses the search box. Safe to call from any goroutine.
 func (c *Controller) Open() {
 	if c.ctx == nil {
 		return
 	}
-
-	// Capture the current foreground window BEFORE anything else: any later
-	// call (findPanelWindow, AttachThreadInput, showing our window) can
-	// perturb the foreground, so the restore target must be grabbed first.
-	// This runs on the hotkey callback, the earliest reliable point.
-	prev := windows.GetForegroundWindow()
-
 	hwnd := findPanelWindow()
 	if hwnd == 0 {
 		return
 	}
-
 	// Toggle: a visible panel closes on a second press of the hotkey.
 	if windows.IsWindowVisible(hwnd) {
 		c.hide()
+		return
+	}
+	c.show("panel-opened")
+}
+
+// OpenSettings is the tray «设置» action. If the window is already visible
+// it just emits «settings-opened» to switch the frontend view in place;
+// otherwise it shows the window (reusing the panel's show path) then emits
+// the event. It never toggles closed — the settings window is opened
+// deliberately from the tray, unlike the hotkey-driven panel.
+func (c *Controller) OpenSettings() {
+	if c.ctx == nil {
+		return
+	}
+	hwnd := findPanelWindow()
+	if hwnd == 0 {
+		return
+	}
+	if windows.IsWindowVisible(hwnd) {
+		runtime.EventsEmit(c.ctx, "settings-opened")
+		return
+	}
+	c.show("settings-opened")
+}
+
+// show brings the hidden window up centred on the monitor under the mouse,
+// takes the foreground and emits emitEvent so the frontend can switch its
+// view (panel vs settings) and focus the right control. It captures the
+// previous foreground first so hide() can return focus to it.
+func (c *Controller) show(emitEvent string) {
+	// Capture the current foreground window BEFORE anything else: any later
+	// call (findPanelWindow, AttachThreadInput, showing our window) can
+	// perturb the foreground, so the restore target must be grabbed first.
+	prev := windows.GetForegroundWindow()
+
+	hwnd := findPanelWindow()
+	if hwnd == 0 {
 		return
 	}
 
@@ -119,7 +147,7 @@ func (c *Controller) Open() {
 		detachFromForeground(hwnd)
 	}
 
-	runtime.EventsEmit(c.ctx, "panel-opened")
+	runtime.EventsEmit(c.ctx, emitEvent)
 }
 
 // findPanelWindow returns the Wails main window handle, or 0 if it does not

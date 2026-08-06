@@ -210,3 +210,71 @@ func TestRecordReportsPersistenceFailure(t *testing.T) {
 		t.Fatalf("All() = %v, want entry kept in memory despite persist error", got)
 	}
 }
+
+func TestSetLimitTrimsExistingImmediately(t *testing.T) {
+	s, _ := newStore(t)
+	for _, p := range []string{`C:\a`, `C:\b`, `C:\c`, `C:\d`, `C:\e`} {
+		if err := s.Record(p); err != nil {
+			t.Fatalf("Record(%q): %v", p, err)
+		}
+	}
+	if err := s.SetLimit(3); err != nil {
+		t.Fatalf("SetLimit(3): %v", err)
+	}
+	got := s.All()
+	if len(got) != 3 {
+		t.Fatalf("after SetLimit All() = %d entries, want 3 (trimmed)", len(got))
+	}
+	want := []string{`C:\e`, `C:\d`, `C:\c`} // newest three
+	for i, w := range want {
+		if got[i].Path != w {
+			t.Fatalf("All()[%d].Path = %q, want %q", i, got[i].Path, w)
+		}
+	}
+}
+
+func TestSetLimitPersistsTrimmedList(t *testing.T) {
+	s, p := newStore(t)
+	for _, x := range []string{`C:\1`, `C:\2`, `C:\3`, `C:\4`} {
+		if err := s.Record(x); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.SetLimit(2); err != nil {
+		t.Fatalf("SetLimit(2): %v", err)
+	}
+	// A fresh store over the same file reads the persisted (trimmed) list.
+	got := recentfolders.New(p).All()
+	if len(got) != 2 {
+		t.Fatalf("reload All() = %d, want 2 (persisted trim)", len(got))
+	}
+}
+
+func TestSetLimitEnforcedOnSubsequentRecord(t *testing.T) {
+	s, _ := newStore(t)
+	if err := s.SetLimit(2); err != nil {
+		t.Fatalf("SetLimit(2): %v", err)
+	}
+	for _, p := range []string{`C:\a`, `C:\b`, `C:\c`, `C:\d`} {
+		if err := s.Record(p); err != nil {
+			t.Fatalf("Record(%q): %v", p, err)
+		}
+	}
+	if got := s.All(); len(got) != 2 {
+		t.Fatalf("All() = %d, want 2 (new cap enforced)", len(got))
+	}
+}
+
+func TestSetLimitRejectsZero(t *testing.T) {
+	s, _ := newStore(t)
+	if err := s.Record(`C:\x`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetLimit(0); err == nil {
+		t.Fatal("SetLimit(0) succeeded, want error")
+	}
+	// State is unchanged: limit still default, entry still there.
+	if got := s.All(); len(got) != 1 {
+		t.Fatalf("All() after rejected SetLimit = %d, want 1 (unchanged)", len(got))
+	}
+}

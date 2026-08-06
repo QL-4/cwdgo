@@ -11,3 +11,6 @@ frontend/dist/
 
 # Local scratch
 .scratch/
+
+# Pi Agent
+.pi/llm-call/

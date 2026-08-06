@@ -6,6 +6,10 @@ export function GetRecentFolders() {
   return window['go']['main']['App']['GetRecentFolders']();
 }
 
+export function GetSettings() {
+  return window['go']['main']['App']['GetSettings']();
+}
+
 export function GetSoftwareList() {
   return window['go']['main']['App']['GetSoftwareList']();
 }
@@ -24,6 +28,10 @@ export function OpenWith(arg1, arg2) {
 
 export function Quit() {
   return window['go']['main']['App']['Quit']();
+}
+
+export function SaveSettings(arg1, arg2) {
+  return window['go']['main']['App']['SaveSettings'](arg1, arg2);
 }
 
 export function Search(arg1) {

@@ -6,6 +6,7 @@ package recentfolders
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,17 +34,21 @@ func (e Entry) Name() string {
 }
 
 // Store is the in-memory Recent Folders list with JSON persistence. It is
-// safe for concurrent use.
+// safe for concurrent use. The cap (limit) defaults to MaxEntries and can
+// be changed at runtime via SetLimit (e.g. when the user edits the history
+// cap in settings).
 type Store struct {
 	mu    sync.RWMutex
 	path  string
+	limit int     // current cap; MaxEntries by default
 	items []Entry // newest first
 }
 
 // New loads the store from the JSON file at filePath. A missing, unreadable
-// or corrupted file silently yields an empty store.
+// or corrupted file silently yields an empty store. The cap is MaxEntries
+// until SetLimit changes it (settings applied by the host at startup).
 func New(filePath string) *Store {
-	s := &Store{path: filePath}
+	s := &Store{path: filePath, limit: MaxEntries}
 	s.load()
 	return s
 }
@@ -64,8 +69,8 @@ func (s *Store) load() {
 			s.items = append(s.items, e)
 		}
 	}
-	if len(s.items) > MaxEntries {
-		s.items = s.items[:MaxEntries]
+	if len(s.items) > s.limit {
+		s.items = s.items[:s.limit]
 	}
 }
 
@@ -97,10 +102,28 @@ func (s *Store) Record(path string) error {
 		bumped.LastUsed = now // keep first-seen casing, refresh timestamp
 	}
 	next := append([]Entry{bumped}, kept...)
-	if len(next) > MaxEntries {
-		next = next[:MaxEntries]
+	if len(next) > s.limit {
+		next = next[:s.limit]
 	}
 	s.items = next
+	return s.persistLocked()
+}
+
+// SetLimit changes the cap to limit and immediately trims any entries beyond
+// it, persisting the trimmed list. It is called when the user edits the
+// history cap in settings; the cap itself is owned by the settings store, so
+// it is not persisted here (only the resulting trimmed entries are). A
+// limit < 1 is rejected without mutating state.
+func (s *Store) SetLimit(limit int) error {
+	if limit < 1 {
+		return fmt.Errorf("recentfolders: limit must be >= 1, got %d", limit)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.limit = limit
+	if len(s.items) > limit {
+		s.items = s.items[:limit]
+	}
 	return s.persistLocked()
 }
 

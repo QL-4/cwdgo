@@ -38,3 +38,22 @@ export namespace openactions {
 
 }
 
+export namespace settings {
+	
+	export class Settings {
+	    historyLimit: number;
+	    autoStart: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Settings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.historyLimit = source["historyLimit"];
+	        this.autoStart = source["autoStart"];
+	    }
+	}
+
+}
+

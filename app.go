@@ -12,6 +12,8 @@ import (
 	"cwdgo/domain/openactions"
 	"cwdgo/domain/recentfolders"
 	"cwdgo/domain/search"
+	"cwdgo/domain/settings"
+	"cwdgo/internal/autostart"
 	"cwdgo/internal/launcher"
 	"cwdgo/internal/panel"
 )
@@ -21,15 +23,16 @@ import (
 type App struct {
 	ctx      context.Context
 	store    *recentfolders.Store
+	history  *settings.Store
 	launcher openactions.Launcher
 	software []openactions.Software
 	panel    *panel.Controller
 }
 
-// NewApp wires the App binding to the Recent Folders store, the launcher, the
-// preset Software List and the panel controller.
-func NewApp(store *recentfolders.Store, launcher openactions.Launcher, software []openactions.Software, p *panel.Controller) *App {
-	return &App{store: store, launcher: launcher, software: software, panel: p}
+// NewApp wires the App binding to the Recent Folders store, the settings
+// store, the launcher, the preset Software List and the panel controller.
+func NewApp(store *recentfolders.Store, history *settings.Store, launcher openactions.Launcher, software []openactions.Software, p *panel.Controller) *App {
+	return &App{store: store, history: history, launcher: launcher, software: software, panel: p}
 }
 
 // startup is called once when the Wails runtime is ready.
@@ -104,6 +107,40 @@ func (a *App) OpenWith(folder string, index int) error {
 		return fmt.Errorf("openactions: no software action at index %d", index)
 	}
 	return openactions.OpenSoftware(folder, a.software[index], a.launcher, a.store)
+}
+
+// GetSettings returns the persisted user settings (history cap, auto-start)
+// for the settings view to render.
+func (a *App) GetSettings() settings.Settings {
+	return a.history.Get()
+}
+
+// SaveSettings validates and persists historyLimit and autoStart, then
+// applies them live: the history cap is enforced on the store immediately
+// (trimming any overflow), and the Windows auto-start Run entry is written
+// or removed. It returns an error without side effects if the settings are
+// invalid; if persistence succeeds but a later apply step fails, the error
+// is returned but the persisted value is kept (the next launch reconciles).
+func (a *App) SaveSettings(historyLimit int, autoStart bool) error {
+	s := settings.Settings{HistoryLimit: historyLimit, AutoStart: autoStart}
+	if err := a.history.Update(s); err != nil {
+		return err
+	}
+	// Apply the cap live so the panel reflects the new limit at once.
+	if err := a.store.SetLimit(historyLimit); err != nil {
+		return err
+	}
+	// Apply the auto-start registry entry to match the persisted toggle.
+	if autoStart {
+		if err := autostart.Enable(); err != nil {
+			return err
+		}
+	} else {
+		if err := autostart.Disable(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Quit shuts the application down. Safe to call from any goroutine once

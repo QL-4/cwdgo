@@ -1,41 +1,63 @@
 import './style.css';
 
-import { GetRecentFolders, Search, IsDirectory, Open, GetSoftwareList, OpenWith } from '../wailsjs/go/main/App';
+import { GetRecentFolders, Search, IsDirectory, Open, GetSoftwareList, OpenWith, GetSettings, SaveSettings } from '../wailsjs/go/main/App';
 import { EventsOn, WindowHide } from '../wailsjs/runtime/runtime';
 
+const panel = document.getElementById('panel');
+const settingsView = document.getElementById('settings');
 const input = document.getElementById('search');
 const empty = document.getElementById('empty');
 const emptyTitle = document.getElementById('empty-title');
 const emptyHint = document.getElementById('empty-hint');
 const results = document.getElementById('results');
 
+// Settings view controls.
+const backBtn = document.getElementById('back');
+const historyLimit = document.getElementById('history-limit');
+const autostart = document.getElementById('autostart');
+const settingsMsg = document.getElementById('settings-msg');
+
 // Panel state.
 //   all       — full Recent Folders list (newest first)
 //   filtered  — current fuzzy-filtered subset
 //   selected  — index within filtered (-1 = nothing selected)
 //   software  — preset Software List; its index + 1 is the panel key (1-9)
-//   visible   — whether the panel is user-visible; all keyboard input is
+//   visible   — whether the window is user-visible; all keyboard input is
 //               ignored while false. The webview can keep processing keys
 //               briefly after the host window is hidden, so this guard stops
-//               a stray keystroke from opening a folder once dismissed.
+//               a stray keystroke from acting once dismissed.
+//   view      — which view is showing ('panel' | 'settings'). Panel-only
+//               shortcuts (digits, arrows, Enter) are gated on 'panel'; Esc
+//               closes from either view.
 let all = [];
 let filtered = [];
 let selected = -1;
 let software = [];
 let visible = false;
+let view = 'panel';
 
-// The panel opens (hotkey or tray): clear the box, focus it and reload both
-// the folder list and the software list so they reflect current state.
+// The panel opens (hotkey or tray): switch to the panel view, clear the
+// box, focus it and reload both the folder list and the software list so
+// they reflect current state.
 EventsOn('panel-opened', () => {
     visible = true;
+    showView('panel');
     input.value = '';
     input.focus();
     load();
 });
 
-// The panel was hidden from the Go side (deactivation, or the hotkey toggled
-// it closed). Disarm keyboard input and drop focus so no stray keystroke can
-// trigger an action while the window is dismissed.
+// The settings view opens (tray «设置»). Switch to it and load the current
+// persisted values into the form.
+EventsOn('settings-opened', () => {
+    visible = true;
+    showView('settings');
+    loadSettings();
+});
+
+// The window was hidden from the Go side (deactivation, or the hotkey
+// toggled it closed). Disarm keyboard input and drop focus so no stray
+// keystroke can trigger an action while the window is dismissed.
 EventsOn('panel-hidden', () => {
     dismiss();
 });
@@ -64,6 +86,15 @@ window.addEventListener('keydown', (e) => {
     if (!visible) {
         return;
     }
+    // Esc closes the window from either view.
+    if (e.key === 'Escape') {
+        closePanel();
+        return;
+    }
+    // Panel-only shortcuts are ignored while the settings view is up.
+    if (view !== 'panel') {
+        return;
+    }
     // Digit keys 1-9 trigger the Software List action of that ordinal on the
     // resolved target folder (typed path wins, else the selected entry).
     if (e.key >= '1' && e.key <= '9') {
@@ -83,9 +114,6 @@ window.addEventListener('keydown', (e) => {
         case 'Enter':
             e.preventDefault();
             openDefault();
-            break;
-        case 'Escape':
-            closePanel();
             break;
     }
 });
@@ -252,6 +280,70 @@ function scrollSelectedIntoView() {
     const el = results.children[selected];
     if (el) el.scrollIntoView({ block: 'nearest' });
 }
+
+// --- Settings view ---
+
+// showView toggles which view is rendered. It is called on panel-opened /
+// settings-opened and on the «返回面板» button.
+function showView(v) {
+    view = v;
+    panel.classList.toggle('hidden', v !== 'panel');
+    settingsView.classList.toggle('hidden', v !== 'settings');
+    hideSettingsMsg();
+}
+
+// loadSettings fills the form from the persisted Settings. It does NOT focus
+// the field: the settings view is read-mostly and the user edits by clicking
+// in, so opening it should not pre-select / highlight a value.
+async function loadSettings() {
+    try {
+        const s = await GetSettings();
+        historyLimit.value = String(s.historyLimit);
+        autostart.checked = !!s.autoStart;
+    } catch (err) {
+        console.error('GetSettings failed:', err);
+        showSettingsMsg('读取设置失败: ' + err, true);
+    }
+}
+
+// applySettings reads the form, validates client-side, and calls the binding
+// which persists + applies the cap and the registry entry live. Called on
+// every change (no Save button — edits save immediately).
+async function applySettings() {
+    const limit = parseInt(historyLimit.value, 10);
+    if (!Number.isFinite(limit) || limit < 1) {
+        showSettingsMsg('历史上限必须是大于 0 的整数', true);
+        return;
+    }
+    try {
+        await SaveSettings(limit, autostart.checked);
+        hideSettingsMsg();
+    } catch (err) {
+        console.error('SaveSettings failed:', err);
+        showSettingsMsg('保存失败: ' + err, true);
+    }
+}
+
+function showSettingsMsg(text, isError) {
+    settingsMsg.textContent = text;
+    settingsMsg.classList.toggle('error', !!isError);
+    settingsMsg.classList.remove('hidden');
+}
+
+function hideSettingsMsg() {
+    settingsMsg.classList.add('hidden');
+    settingsMsg.textContent = '';
+}
+
+backBtn.addEventListener('click', () => {
+    showView('panel');
+    input.focus();
+});
+
+// Edits save immediately: a change on either control (number input loses
+// focus / Enter, checkbox toggled) applies the settings live.
+historyLimit.addEventListener('change', applySettings);
+autostart.addEventListener('change', applySettings);
 
 // Initial paint in case the webview loads before the first panel-opened.
 load();
