@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>cwdgo</title>
+</head>
+<body>
+<div id="app">
+    <input id="search" type="text" placeholder="搜索最近文件夹…"
+           autocomplete="off" spellcheck="false"/>
+    <div id="empty" class="empty hidden">
+        <div class="empty-title">还没有历史记录</div>
+        <div class="empty-hint">打开过的文件夹会出现在这里</div>
+    </div>
+    <ul id="results"></ul>
+</div>
+<script src="./src/main.js" type="module"></script>
+</body>
+</html>

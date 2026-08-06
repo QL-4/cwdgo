@@ -1,0 +1,13 @@
+# Wails build output
+build/bin/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Go
+*.exe
+*.test
+
+# Local scratch
+.scratch/
