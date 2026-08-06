@@ -14,12 +14,24 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
 // DefaultHistoryLimit caps how many Recent Folders the history keeps, unless
 // the user overrides it. Matches the spec default ("上限 50").
 const DefaultHistoryLimit = 50
+
+// Software is one entry in the user-managed Software List: an external app
+// that can open a folder. This is the persisted configuration model; the
+// thin binding layer converts it to the open action executor's model. A
+// valid entry requires a non-empty Name and Exe; Args may be empty (the
+// folder is then passed as the final positional argument).
+type Software struct {
+	Name string   `json:"name"`
+	Exe  string   `json:"exe"`
+	Args []string `json:"args"`
+}
 
 // Settings is the full, persisted configuration. Update replaces it
 // wholesale, so every persisted field is represented here.
@@ -29,6 +41,9 @@ type Settings struct {
 	// AutoStart is the Windows auto-start toggle (default off). The store
 	// only holds the value; the registry write is performed by platform glue.
 	AutoStart bool `json:"autoStart"`
+	// Software is the user-managed Software List (name/exe/args). Empty by
+	// default; the glue layer seeds it from detected presets on first run.
+	Software []Software `json:"software"`
 }
 
 // Defaults returns the first-run Settings.
@@ -40,6 +55,14 @@ func Defaults() Settings {
 func (s Settings) Validate() error {
 	if s.HistoryLimit < 1 {
 		return fmt.Errorf("settings: historyLimit must be >= 1, got %d", s.HistoryLimit)
+	}
+	for i, sw := range s.Software {
+		if strings.TrimSpace(sw.Name) == "" {
+			return fmt.Errorf("settings: software[%d] name must not be empty", i)
+		}
+		if strings.TrimSpace(sw.Exe) == "" {
+			return fmt.Errorf("settings: software[%d] (%q) exe must not be empty", i, sw.Name)
+		}
 	}
 	return nil
 }

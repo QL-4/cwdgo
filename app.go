@@ -23,16 +23,15 @@ import (
 type App struct {
 	ctx      context.Context
 	store    *recentfolders.Store
-	history  *settings.Store
+	settings *settings.Store
 	launcher openactions.Launcher
-	software []openactions.Software
 	panel    *panel.Controller
 }
 
 // NewApp wires the App binding to the Recent Folders store, the settings
-// store, the launcher, the preset Software List and the panel controller.
-func NewApp(store *recentfolders.Store, history *settings.Store, launcher openactions.Launcher, software []openactions.Software, p *panel.Controller) *App {
-	return &App{store: store, history: history, launcher: launcher, software: software, panel: p}
+// store, the launcher and the panel controller.
+func NewApp(store *recentfolders.Store, settings *settings.Store, launcher openactions.Launcher, p *panel.Controller) *App {
+	return &App{store: store, settings: settings, launcher: launcher, panel: p}
 }
 
 // startup is called once when the Wails runtime is ready.
@@ -91,10 +90,7 @@ func (a *App) Open(folder string) error {
 // numbered actions (keys 1-9). It is built once at startup from the apps
 // actually installed on this machine.
 func (a *App) GetSoftwareList() []openactions.Software {
-	if a.software == nil {
-		return []openactions.Software{}
-	}
-	return a.software
+	return toActionSoftware(a.settings.Get().Software)
 }
 
 // OpenWith opens folder with the Software List entry at index (0-based, so
@@ -103,16 +99,17 @@ func (a *App) GetSoftwareList() []openactions.Software {
 // action. It returns an error if index is out of range, the folder is not an
 // existing directory, or the app could not be launched.
 func (a *App) OpenWith(folder string, index int) error {
-	if index < 0 || index >= len(a.software) {
+	sw := toActionSoftware(a.settings.Get().Software)
+	if index < 0 || index >= len(sw) {
 		return fmt.Errorf("openactions: no software action at index %d", index)
 	}
-	return openactions.OpenSoftware(folder, a.software[index], a.launcher, a.store)
+	return openactions.OpenSoftware(folder, sw[index], a.launcher, a.store)
 }
 
 // GetSettings returns the persisted user settings (history cap, auto-start)
 // for the settings view to render.
 func (a *App) GetSettings() settings.Settings {
-	return a.history.Get()
+	return a.settings.Get()
 }
 
 // SaveSettings validates and persists historyLimit and autoStart, then
@@ -122,8 +119,12 @@ func (a *App) GetSettings() settings.Settings {
 // invalid; if persistence succeeds but a later apply step fails, the error
 // is returned but the persisted value is kept (the next launch reconciles).
 func (a *App) SaveSettings(historyLimit int, autoStart bool) error {
-	s := settings.Settings{HistoryLimit: historyLimit, AutoStart: autoStart}
-	if err := a.history.Update(s); err != nil {
+	// Preserve the current Software List: SaveSettings is the form-driven
+	// path for cap + auto-start only; software edits go through the
+	// Add/Update/Delete bindings.
+	cur := a.settings.Get()
+	s := settings.Settings{HistoryLimit: historyLimit, AutoStart: autoStart, Software: cur.Software}
+	if err := a.settings.Update(s); err != nil {
 		return err
 	}
 	// Apply the cap live so the panel reflects the new limit at once.
@@ -143,6 +144,65 @@ func (a *App) SaveSettings(historyLimit int, autoStart bool) error {
 	return nil
 }
 
+// AddSoftware appends a new Software List entry and persists it. Validation
+// (non-empty name/exe) happens inside the settings store. The panel picks
+// up the new entry on its next GetSoftwareList call / panel-opened refresh.
+func (a *App) AddSoftware(name, exe string, args []string) error {
+	return a.mutateSoftware(func(list []settings.Software) []settings.Software {
+		return append(list, settings.Software{Name: name, Exe: exe, Args: args})
+	})
+}
+
+// UpdateSoftware replaces the Software List entry at index with the given
+// fields. It returns an error if index is out of range or the new fields are
+// invalid.
+func (a *App) UpdateSoftware(index int, name, exe string, args []string) error {
+	return a.mutateSoftware(func(list []settings.Software) []settings.Software {
+		list[index] = settings.Software{Name: name, Exe: exe, Args: args}
+		return list
+	})
+}
+
+// DeleteSoftware removes the Software List entry at index. Indices beyond the
+// removed one are renumbered automatically (no holes).
+func (a *App) DeleteSoftware(index int) error {
+	return a.mutateSoftware(func(list []settings.Software) []settings.Software {
+		return append(list[:index], list[index+1:]...)
+	})
+}
+
+// mutateSoftware reads the current settings, applies fn to a copy of the
+// Software List (fn must bounds-check itself), validates the whole resulting
+// settings, and persists. Other settings fields (cap, auto-start) are
+// preserved.
+func (a *App) mutateSoftware(fn func([]settings.Software) []settings.Software) error {
+	cur := a.settings.Get()
+	next := fn(append([]settings.Software(nil), cur.Software...))
+	return a.settings.Update(settings.Settings{
+		HistoryLimit: cur.HistoryLimit,
+		AutoStart:    cur.AutoStart,
+		Software:     next,
+	})
+}
+
+// toActionSoftware converts the persisted config model to the open-action
+// executor model. The two are structurally identical but live in separate
+// packages so the settings store stays independent of the action executor.
+func toActionSoftware(in []settings.Software) []openactions.Software {
+	if len(in) == 0 {
+		return []openactions.Software{}
+	}
+	out := make([]openactions.Software, 0, len(in))
+	for _, s := range in {
+		args := s.Args
+		if args == nil {
+			args = []string{}
+		}
+		out = append(out, openactions.Software{Name: s.Name, Exe: s.Exe, Args: args})
+	}
+	return out
+}
+
 // Quit shuts the application down. Safe to call from any goroutine once
 // startup has run.
 func (a *App) Quit() {
@@ -158,10 +218,10 @@ func (a *App) Quit() {
 // is handled. This is platform glue (shortcut resolution / PATH probing)
 // and is not unit-tested — the Software command construction and the
 // launch/record path it feeds are tested in domain/openactions.
-func defaultSoftware() []openactions.Software {
-	out := []openactions.Software{}
+func defaultSoftware() []settings.Software {
+	out := []settings.Software{}
 	if exeAvailable("powershell.exe") {
-		out = append(out, openactions.Software{
+		out = append(out, settings.Software{
 			Name: "PowerShell",
 			Exe:  "powershell.exe",
 			Args: []string{"-NoExit", "-Command", "Set-Location '{folder}'"},
@@ -170,7 +230,7 @@ func defaultSoftware() []openactions.Software {
 	presets := launcher.ResolvePresets()
 	for _, p := range launcher.Presets {
 		if exe, ok := presets[p.Name]; ok {
-			out = append(out, openactions.Software{Name: p.Name, Exe: exe})
+			out = append(out, settings.Software{Name: p.Name, Exe: exe})
 		}
 	}
 	return out

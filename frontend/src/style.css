@@ -13,6 +13,38 @@
     padding: 0;
 }
 
+/* Custom thin scrollbars for the scrolling lists (#results, #sw-list) —
+   Chromium supports ::-webkit-scrollbar, so the native chunky scrollbar is
+   replaced with a slim track + a muted thumb that highlights on hover.
+   Applies to all elements that actually scroll. */
+*::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: var(--muted);
+}
+
+*::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* Firefox fallback (not used by WebView2, harmless): a slim thumb. */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+}
+
 html, body {
     width: 100%;
     height: 100%;
@@ -192,6 +224,30 @@ html, body {
     color: var(--muted);
 }
 
+/* The cap + auto-start fields share one row. */
+.field-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+}
+
+.field.compact {
+    gap: 4px;
+}
+
+/* Cap field: label and input on the same line (left part of the row). */
+.field.compact:not(.row) {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+}
+
+/* History cap is a small number; shrink it so it doesn't stretch the row. */
+.field.compact #history-limit {
+    width: 70px;
+}
+
 #history-limit {
     width: 100%;
     padding: 8px 12px;
@@ -221,4 +277,151 @@ html, body {
 
 .msg.error {
     color: #e57373;
+}
+
+/* --- Software list section --- */
+.sw-section {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.sw-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 2px;
+}
+
+.sw-head h3 {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.sw-section .hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 8px;
+}
+
+#sw-list {
+    list-style: none;
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 0;
+}
+
+#sw-list li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
+}
+
+#sw-list li:hover {
+    background: var(--panel);
+}
+
+#sw-list li kbd {
+    flex: 0 0 auto;
+    font-family: inherit;
+    font-size: 11px;
+    color: var(--accent);
+    min-width: 14px;
+    text-align: center;
+}
+
+#sw-list li .sw-info {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+#sw-list li .sw-name {
+    font-size: 13px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#sw-list li .sw-exe {
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#sw-list li.sw-empty {
+    color: var(--muted);
+    font-size: 13px;
+    justify-content: center;
+    padding: 16px;
+}
+
+.link.danger {
+    color: #e57373;
+}
+
+.link.danger:hover {
+    color: #ef9a9a;
+}
+
+.sw-form {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+}
+
+.sw-form-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.sw-form-row input {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 7px 10px;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    outline: none;
+    font-size: 13px;
+}
+
+.sw-form-row input:focus {
+    border-color: var(--accent);
+}
+
+/* Name field in the first row is narrower (paths can be long). */
+.sw-form-row #sw-name {
+    flex: 0 0 130px;
+}
+
+#sw-add {
+    flex: 0 0 auto;
+    padding: 7px 16px;
+    color: var(--bg);
+    background: var(--accent);
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+#sw-add:hover {
+    filter: brightness(1.08);
 }

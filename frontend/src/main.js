@@ -1,6 +1,6 @@
 import './style.css';
 
-import { GetRecentFolders, Search, IsDirectory, Open, GetSoftwareList, OpenWith, GetSettings, SaveSettings } from '../wailsjs/go/main/App';
+import { GetRecentFolders, Search, IsDirectory, Open, GetSoftwareList, OpenWith, GetSettings, SaveSettings, AddSoftware, UpdateSoftware, DeleteSoftware } from '../wailsjs/go/main/App';
 import { EventsOn, WindowHide } from '../wailsjs/runtime/runtime';
 
 const panel = document.getElementById('panel');
@@ -16,6 +16,19 @@ const backBtn = document.getElementById('back');
 const historyLimit = document.getElementById('history-limit');
 const autostart = document.getElementById('autostart');
 const settingsMsg = document.getElementById('settings-msg');
+
+// Software list controls.
+const swList = document.getElementById('sw-list');
+const swName = document.getElementById('sw-name');
+const swExe = document.getElementById('sw-exe');
+const swArgs = document.getElementById('sw-args');
+const swForm = document.querySelector('.sw-form');
+const swAddBtn = document.getElementById('sw-add');
+const swNewBtn = document.getElementById('sw-new');
+const swCancelBtn = document.getElementById('sw-cancel');
+// editIndex is the index of the entry currently being edited, or -1 when
+// the form is in «add» mode (or hidden).
+let editIndex = -1;
 
 // Panel state.
 //   all       — full Recent Folders list (newest first)
@@ -300,6 +313,8 @@ async function loadSettings() {
         const s = await GetSettings();
         historyLimit.value = String(s.historyLimit);
         autostart.checked = !!s.autoStart;
+        resetSwForm();
+        renderSoftwareList(s.software || []);
     } catch (err) {
         console.error('GetSettings failed:', err);
         showSettingsMsg('读取设置失败: ' + err, true);
@@ -344,6 +359,150 @@ backBtn.addEventListener('click', () => {
 // focus / Enter, checkbox toggled) applies the settings live.
 historyLimit.addEventListener('change', applySettings);
 autostart.addEventListener('change', applySettings);
+
+// --- Software list CRUD ---
+
+// renderSoftwareList draws the persisted entries with inline edit/delete and
+// shows the ordinal key (1-9) each maps to; beyond 9 there is no key, only
+// mouse click (spec: keys 1-9).
+function renderSoftwareList(list) {
+    swList.innerHTML = '';
+    if (!list.length) {
+        const li = document.createElement('li');
+        li.className = 'sw-empty';
+        li.textContent = '还没有软件，在下方添加。';
+        swList.appendChild(li);
+        return;
+    }
+    const frag = document.createDocumentFragment();
+    list.forEach((sw, i) => {
+        const li = document.createElement('li');
+        li.dataset.index = String(i);
+
+        if (i <= 8) {
+            const key = document.createElement('kbd');
+            key.textContent = String(i + 1);
+            li.appendChild(key);
+        }
+
+        const info = document.createElement('span');
+        info.className = 'sw-info';
+        const name = document.createElement('span');
+        name.className = 'sw-name';
+        name.textContent = sw.name;
+        info.appendChild(name);
+        const exe = document.createElement('span');
+        exe.className = 'sw-exe';
+        exe.textContent = sw.exe + (sw.args && sw.args.length ? ' ' + sw.args.join(' ') : '');
+        info.appendChild(exe);
+        li.appendChild(info);
+
+        const edit = document.createElement('button');
+        edit.type = 'button';
+        edit.className = 'link';
+        edit.textContent = '编辑';
+        edit.addEventListener('click', () => beginEdit(i, sw));
+        li.appendChild(edit);
+
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'link danger';
+        del.textContent = '删除';
+        del.addEventListener('click', () => removeSoftware(i));
+        li.appendChild(del);
+
+        frag.appendChild(li);
+    });
+    swList.appendChild(frag);
+}
+
+// beginEdit loads an entry into the form for editing and flips the add
+// button to «保存修改».
+// beginEdit loads an entry into the form for editing, shows the form and
+// flips the button to «保存修改».
+function beginEdit(index, sw) {
+    editIndex = index;
+    swName.value = sw.name || '';
+    swExe.value = sw.exe || '';
+    swArgs.value = (sw.args && sw.args.length) ? sw.args.join(' ') : '';
+    swAddBtn.textContent = '保存修改';
+    swForm.classList.remove('hidden');
+    swName.focus();
+}
+
+// beginAdd opens the form blank for a new entry.
+function beginAdd() {
+    editIndex = -1;
+    swName.value = '';
+    swExe.value = '';
+    swArgs.value = '';
+    swAddBtn.textContent = '保存';
+    swForm.classList.remove('hidden');
+    swName.focus();
+}
+
+// resetSwForm hides the form and clears it back to add mode (no selection).
+function resetSwForm() {
+    editIndex = -1;
+    swName.value = '';
+    swExe.value = '';
+    swArgs.value = '';
+    swAddBtn.textContent = '保存';
+    swForm.classList.add('hidden');
+}
+
+// commitSoftware adds a new entry or updates the edited one from the form,
+// then reloads the list. Args are space-split into a slice; {folder} is
+// kept literal so the backend placeholder substitution still works.
+async function commitSoftware() {
+    const name = swName.value.trim();
+    const exe = swExe.value.trim();
+    if (!name || !exe) {
+        showSettingsMsg('名称和路径不能为空', true);
+        return;
+    }
+    const args = swArgs.value.trim() ? swArgs.value.trim().split(/\s+/) : [];
+    try {
+        if (editIndex >= 0) {
+            await UpdateSoftware(editIndex, name, exe, args);
+        } else {
+            await AddSoftware(name, exe, args);
+        }
+        resetSwForm();
+        await reloadSoftwareList();
+        hideSettingsMsg();
+    } catch (err) {
+        console.error('commitSoftware failed:', err);
+        showSettingsMsg('保存失败: ' + err, true);
+    }
+}
+
+async function removeSoftware(index) {
+    try {
+        await DeleteSoftware(index);
+        resetSwForm();
+        await reloadSoftwareList();
+        hideSettingsMsg();
+    } catch (err) {
+        console.error('DeleteSoftware failed:', err);
+        showSettingsMsg('删除失败: ' + err, true);
+    }
+}
+
+// reloadSoftwareList re-reads settings and redraws only the list, without
+// disturbing the cap/autostart form fields.
+async function reloadSoftwareList() {
+    try {
+        const s = await GetSettings();
+        renderSoftwareList(s.software || []);
+    } catch (err) {
+        console.error('reloadSoftwareList failed:', err);
+    }
+}
+
+swAddBtn.addEventListener('click', commitSoftware);
+swNewBtn.addEventListener('click', beginAdd);
+swCancelBtn.addEventListener('click', resetSwForm);
 
 // Initial paint in case the webview loads before the first panel-opened.
 load();

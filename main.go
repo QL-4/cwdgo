@@ -32,9 +32,13 @@ func main() {
 	if err := store.SetLimit(hist.Get().HistoryLimit); err != nil {
 		applog.Log("settings: apply history limit at startup: %v", err)
 	}
-	software := defaultSoftware()
+	// Seed the Software List on first run: when settings has no software
+	// entries yet (fresh settings.json or defaults), persist the detected
+	// presets so they become user-manageable. Subsequent launches keep the
+	// user's edits, even if a preset is later uninstalled.
+	seedSoftware(hist)
 	p := panel.New()
-	app := NewApp(store, hist, launcher.OSLauncher{}, software, p)
+	app := NewApp(store, hist, launcher.OSLauncher{}, p)
 
 	// Tray runs on its own OS thread; the Wails main loop owns the main
 	// thread. Exiting via the tray menu quits the whole process.
@@ -98,6 +102,28 @@ func settingsPath() string {
 		dir = os.TempDir()
 	}
 	return filepath.Join(dir, "cwdgo", "settings.json")
+}
+
+// seedSoftware persists the detected preset Software List on first run
+// only — when the settings store holds no software entries yet. After this
+// one-time seed the list is fully user-owned: edits/deletes persist and are
+// not re-seeded even if a preset is later uninstalled.
+func seedSoftware(s *settings.Store) {
+	cur := s.Get()
+	if len(cur.Software) > 0 {
+		return // already seeded or user-managed
+	}
+	presets := defaultSoftware()
+	if len(presets) == 0 {
+		return
+	}
+	if err := s.Update(settings.Settings{
+		HistoryLimit: cur.HistoryLimit,
+		AutoStart:    cur.AutoStart,
+		Software:     presets,
+	}); err != nil {
+		applog.Log("settings: seed software list: %v", err)
+	}
 }
 
 // fileLogger routes Wails log output (including frontend LogDebug calls)

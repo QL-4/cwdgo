@@ -4,6 +4,10 @@ import {main} from '../models';
 import {settings} from '../models';
 import {openactions} from '../models';
 
+export function AddSoftware(arg1:string,arg2:string,arg3:Array<string>):Promise<void>;
+
+export function DeleteSoftware(arg1:number):Promise<void>;
+
 export function GetRecentFolders():Promise<Array<main.Folder>>;
 
 export function GetSettings():Promise<settings.Settings>;
@@ -21,3 +25,5 @@ export function Quit():Promise<void>;
 export function SaveSettings(arg1:number,arg2:boolean):Promise<void>;
 
 export function Search(arg1:string):Promise<Array<main.Folder>>;
+
+export function UpdateSoftware(arg1:number,arg2:string,arg3:string,arg4:Array<string>):Promise<void>;

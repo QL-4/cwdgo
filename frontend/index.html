@@ -24,15 +24,38 @@
             <button id="back" type="button" class="link">‹ 返回面板</button>
             <h2>设置</h2>
         </div>
-        <label class="field">
-            <span class="label-text">历史上限</span>
-            <input id="history-limit" type="text" inputmode="numeric" pattern="[0-9]*"
-                   autocomplete="off"/>
-        </label>
-        <label class="field row">
-            <span class="label-text">开机自启</span>
-            <input id="autostart" type="checkbox"/>
-        </label>
+        <div class="field-row">
+            <label class="field compact">
+                <span class="label-text">历史上限</span>
+                <input id="history-limit" type="text" inputmode="numeric" pattern="[0-9]*"
+                       autocomplete="off"/>
+            </label>
+            <label class="field compact row">
+                <span class="label-text">开机自启</span>
+                <input id="autostart" type="checkbox"/>
+            </label>
+        </div>
+
+        <div class="sw-section">
+            <div class="sw-head">
+                <h3>软件列表</h3>
+                <button id="sw-new" type="button" class="link">+ 新建</button>
+            </div>
+            <p class="hint">面板中按数字键 1-9 用对应应用打开文件夹。</p>
+            <ul id="sw-list"></ul>
+            <div class="sw-form hidden">
+                <div class="sw-form-row">
+                    <input id="sw-name" type="text" placeholder="名称" autocomplete="off"/>
+                    <input id="sw-exe" type="text" placeholder="可执行文件路径" autocomplete="off"/>
+                </div>
+                <div class="sw-form-row">
+                    <input id="sw-args" type="text" placeholder="参数（可选，用 {folder} 代表文件夹）" autocomplete="off"/>
+                    <button id="sw-add" type="button">保存</button>
+                    <button id="sw-cancel" type="button" class="link">取消</button>
+                </div>
+            </div>
+        </div>
+
         <div id="settings-msg" class="msg hidden"></div>
     </div>
 </div>
