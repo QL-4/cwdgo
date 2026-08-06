@@ -7,11 +7,11 @@
 </head>
 <body>
 <div id="app">
-    <input id="search" type="text" placeholder="搜索最近文件夹…"
+    <input id="search" type="text" placeholder="搜索或输入完整路径…"
            autocomplete="off" spellcheck="false"/>
     <div id="empty" class="empty hidden">
-        <div class="empty-title">还没有历史记录</div>
-        <div class="empty-hint">打开过的文件夹会出现在这里</div>
+        <div class="empty-title" id="empty-title"></div>
+        <div class="empty-hint" id="empty-hint"></div>
     </div>
     <ul id="results"></ul>
 </div>

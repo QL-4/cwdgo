@@ -11,6 +11,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 
+	"cwdgo/domain/openactions"
 	"cwdgo/domain/recentfolders"
 	"cwdgo/internal/applog"
 	"cwdgo/internal/hotkey"
@@ -25,7 +26,7 @@ func main() {
 	applog.Log("cwdgo starting")
 	store := recentfolders.New(historyPath())
 	p := panel.New()
-	app := NewApp(store, p)
+	app := NewApp(store, openactions.OSLauncher{}, p)
 
 	// Tray runs on its own OS thread; the Wails main loop owns the main
 	// thread. Exiting via the tray menu quits the whole process.

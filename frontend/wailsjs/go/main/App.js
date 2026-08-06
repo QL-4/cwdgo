@@ -6,6 +6,18 @@ export function GetRecentFolders() {
   return window['go']['main']['App']['GetRecentFolders']();
 }
 
+export function IsDirectory(arg1) {
+  return window['go']['main']['App']['IsDirectory'](arg1);
+}
+
+export function Open(arg1) {
+  return window['go']['main']['App']['Open'](arg1);
+}
+
 export function Quit() {
   return window['go']['main']['App']['Quit']();
+}
+
+export function Search(arg1) {
+  return window['go']['main']['App']['Search'](arg1);
 }

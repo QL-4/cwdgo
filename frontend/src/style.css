@@ -63,6 +63,17 @@ html, body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    cursor: default;
+}
+
+#results li:hover {
+    background: var(--panel);
+}
+
+#results li.selected,
+#results li.selected:hover {
+    background: rgba(244, 194, 92, 0.16);
+    box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .empty {
