@@ -147,3 +147,45 @@ func TestSearchDoesNotMutateInput(t *testing.T) {
 		t.Fatal("Search mutated its input")
 	}
 }
+
+// Filter keeps input order, unlike Search which ranks by fuzzy score. The
+// panel shows Recent Folders newest-first and must not reshuffle recorded
+// items when several match the query.
+func TestFilterKeepsInputOrderAcrossDifferentScores(t *testing.T) {
+	in := []recentfolders.Entry{
+		entry(`C:\a\MyDocuments`), // fuzzy match, later start
+		entry(`C:\b\Documents`),   // prefix match, better score
+	}
+	got := search.Filter(in, "doc")
+	// Same set, but input order preserved (NOT ranked best-first).
+	want := []string{`C:\a\MyDocuments`, `C:\b\Documents`}
+	if !reflect.DeepEqual(paths(got), want) {
+		t.Fatalf("Filter(%q) = %v, want %v (input order)", "doc", paths(got), want)
+	}
+}
+
+func TestFilterEmptyQueryReturnsAllInInputOrder(t *testing.T) {
+	in := []recentfolders.Entry{entry(`C:\a`), entry(`C:\b`)}
+	got := search.Filter(in, "")
+	if !reflect.DeepEqual(got, in) {
+		t.Fatalf("Filter empty = %v, want %v", paths(got), paths(in))
+	}
+}
+
+func TestFilterFuzzyStillMatches(t *testing.T) {
+	in := []recentfolders.Entry{
+		entry(`C:\Users\jerem\Documents`),
+		entry(`D:\other`),
+	}
+	got := search.Filter(in, "dcmnt")
+	if len(got) != 1 || got[0].Path != `C:\Users\jerem\Documents` {
+		t.Fatalf("Filter(%q) = %v, want Documents", "dcmnt", paths(got))
+	}
+}
+
+func TestFilterNoMatchReturnsEmpty(t *testing.T) {
+	in := []recentfolders.Entry{entry(`C:\docs`)}
+	if got := search.Filter(in, "zzzz"); len(got) != 0 {
+		t.Fatalf("Filter = %v, want empty", paths(got))
+	}
+}

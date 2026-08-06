@@ -1,6 +1,6 @@
 import './style.css';
 
-import { GetRecentFolders, Search, IsDirectory, Open, GetSoftwareList, OpenWith, GetSettings, SaveSettings, AddSoftware, UpdateSoftware, DeleteSoftware } from '../wailsjs/go/main/App';
+import { GetRecentFolders, Search, IsDirectory, Open, Record, GetSoftwareList, OpenWith, GetSettings, SaveSettings, AddSoftware, UpdateSoftware, DeleteSoftware } from '../wailsjs/go/main/App';
 import { EventsOn, WindowHide } from '../wailsjs/runtime/runtime';
 
 const panel = document.getElementById('panel');
@@ -173,10 +173,22 @@ async function resolveTarget() {
     return null;
 }
 
-// Enter: open the resolved target with the default Explorer action.
+// Enter: record the resolved target to the top of Recent Folders WITHOUT
+// opening it, then refresh so the user sees it land at the top and can
+// choose how to open it (click the row / press a digit key). The panel
+// stays open and the search box is cleared back to the full list.
 async function openDefault() {
     const path = await resolveTarget();
-    if (path) runAndRefresh(() => Open(path));
+    if (!path) return;
+    try {
+        await Record(path);
+        input.value = '';
+        await load();
+        input.focus();
+    } catch (err) {
+        console.error('record failed:', err);
+        showEmpty('无法记录该文件夹', String(err));
+    }
 }
 
 // A digit key: open the resolved target with software[index], if that many
@@ -235,13 +247,13 @@ function render() {
         // First run / empty history: bootstrap path. Mention the app keys
         // only when at least one is configured.
         const hint = software.length
-            ? '粘贴或输入文件夹路径，回车用资源管理器打开（或按 1-9 用应用打开）'
-            : '粘贴或输入文件夹路径，按回车直接打开';
+            ? '粘贴或输入文件夹路径，回车记录到历史（或按 1-9 用应用打开）'
+            : '粘贴或输入文件夹路径，按回车记录到历史';
         showEmpty('还没有历史记录', hint);
         return;
     }
     if (!filtered.length) {
-        showEmpty('没有匹配的文件夹', '输入完整路径，按回车可直接打开');
+        showEmpty('没有匹配的文件夹', '输入完整路径，按回车记录到历史');
         return;
     }
     empty.classList.add('hidden');
@@ -250,11 +262,19 @@ function render() {
         const li = document.createElement('li');
         li.dataset.index = String(i);
         li.title = folder.path;
+        if (!folder.recorded) li.classList.add('unrecorded');
 
         const name = document.createElement('span');
         name.className = 'name';
         name.textContent = folder.name || folder.path;
         li.appendChild(name);
+
+        if (!folder.recorded) {
+            const tag = document.createElement('span');
+            tag.className = 'tag-new';
+            tag.textContent = '新';
+            li.appendChild(tag);
+        }
 
         if (software.length) {
             const actions = document.createElement('span');

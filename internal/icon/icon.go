@@ -62,6 +62,13 @@ func TrayICO() []byte {
 	return ICO(16, 32)
 }
 
+// RawImageData returns the raw RT_ICON resource data for one size: a
+// BITMAPINFOHEADER + bottom-up BGRA pixels + AND mask. This is exactly what
+// Win32 CreateIconFromResource expects (NOT the ICO file wrapper).
+func RawImageData(size int) []byte {
+	return icoImage(size)
+}
+
 // ICO encodes the given sizes of Draw as a 32bpp BMP-in-ICO container.
 func ICO(sizes ...int) []byte {
 	var buf bytes.Buffer

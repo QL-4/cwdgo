@@ -11,34 +11,77 @@ import (
 )
 
 var (
-	user32                  = windows.NewLazySystemDLL("user32.dll")
-	procFindWindowW         = user32.NewProc("FindWindowW")
-	procGetCursorPos        = user32.NewProc("GetCursorPos")
-	procMonitorFromPoint    = user32.NewProc("MonitorFromPoint")
-	procGetMonitorInfoW     = user32.NewProc("GetMonitorInfoW")
-	procRegisterHotKey      = user32.NewProc("RegisterHotKey")
-	procUnregisterHotKey    = user32.NewProc("UnregisterHotKey")
-	procGetMessageW         = user32.NewProc("GetMessageW")
-	procTranslateMessage    = user32.NewProc("TranslateMessage")
-	procDispatchMessageW    = user32.NewProc("DispatchMessageW")
-	procPostMessageW        = user32.NewProc("PostMessageW")
-	procPostThreadMessageW  = user32.NewProc("PostThreadMessageW")
-	procAttachThreadInput   = user32.NewProc("AttachThreadInput")
-	procSetForegroundWindow = user32.NewProc("SetForegroundWindow")
-	procSetFocus            = user32.NewProc("SetFocus")
-	procBringWindowToTop    = user32.NewProc("BringWindowToTop")
-	procShowWindow          = user32.NewProc("ShowWindow")
-	procKeybdEvent          = user32.NewProc("keybd_event")
-	procGetWindowRect       = user32.NewProc("GetWindowRect")
-	procGetWindowTextW      = user32.NewProc("GetWindowTextW")
-	procGetDC               = user32.NewProc("GetDC")
-	procReleaseDC           = user32.NewProc("ReleaseDC")
+	user32                     = windows.NewLazySystemDLL("user32.dll")
+	procFindWindowW            = user32.NewProc("FindWindowW")
+	procGetCursorPos           = user32.NewProc("GetCursorPos")
+	procMonitorFromPoint       = user32.NewProc("MonitorFromPoint")
+	procGetMonitorInfoW        = user32.NewProc("GetMonitorInfoW")
+	procRegisterHotKey         = user32.NewProc("RegisterHotKey")
+	procUnregisterHotKey       = user32.NewProc("UnregisterHotKey")
+	procGetMessageW            = user32.NewProc("GetMessageW")
+	procTranslateMessage       = user32.NewProc("TranslateMessage")
+	procDispatchMessageW       = user32.NewProc("DispatchMessageW")
+	procPostMessageW           = user32.NewProc("PostMessageW")
+	procPostThreadMessageW     = user32.NewProc("PostThreadMessageW")
+	procAttachThreadInput      = user32.NewProc("AttachThreadInput")
+	procSetForegroundWindow    = user32.NewProc("SetForegroundWindow")
+	procSetFocus               = user32.NewProc("SetFocus")
+	procBringWindowToTop       = user32.NewProc("BringWindowToTop")
+	procShowWindow             = user32.NewProc("ShowWindow")
+	procKeybdEvent             = user32.NewProc("keybd_event")
+	procGetWindowRect          = user32.NewProc("GetWindowRect")
+	procGetWindowTextW         = user32.NewProc("GetWindowTextW")
+	procGetDC                  = user32.NewProc("GetDC")
+	procReleaseDC              = user32.NewProc("ReleaseDC")
+	procDestroyWindow          = user32.NewProc("DestroyWindow")
+	procCreateIconFromResource = user32.NewProc("CreateIconFromResource")
+	procCreatePopupMenu        = user32.NewProc("CreatePopupMenu")
+	procAppendMenuW            = user32.NewProc("AppendMenuW")
+	procDestroyMenu            = user32.NewProc("DestroyMenu")
+	procTrackPopupMenu         = user32.NewProc("TrackPopupMenu")
+	procRegisterWindowMessageW = user32.NewProc("RegisterWindowMessageW")
+	procCreateWindowExW        = user32.NewProc("CreateWindowExW")
+	procRegisterClassExW       = user32.NewProc("RegisterClassExW")
+	procDefWindowProcW         = user32.NewProc("DefWindowProcW")
+	procPostQuitMessage        = user32.NewProc("PostQuitMessage")
+	procLoadCursorW            = user32.NewProc("LoadCursorW")
 )
 
 // Window messages used by this package.
 const (
 	WM_HOTKEY = 0x0312
 	WM_QUIT   = 0x0012
+	WM_NULL   = 0x0000
+)
+
+// Window message constants for tray mouse events.
+const (
+	WM_LBUTTONUP = 0x0202
+	WM_RBUTTONUP = 0x0205
+	WM_COMMAND   = 0x0111
+	WM_CLOSE     = 0x0010
+	WM_DESTROY   = 0x0002
+)
+
+// Shell_NotifyIcon operations and flags.
+const (
+	NIM_ADD    = 0x00000000
+	NIM_MODIFY = 0x00000001
+	NIM_DELETE = 0x00000002
+
+	NIF_MESSAGE = 0x00000001
+	NIF_ICON    = 0x00000002
+	NIF_TIP     = 0x00000004
+)
+
+// Menu flags for AppendMenuW / TrackPopupMenu.
+const (
+	MF_STRING    = 0x00000000
+	MF_SEPARATOR = 0x00000800
+
+	TPM_LEFTALIGN   = 0x0000
+	TPM_BOTTOMALIGN = 0x0020
+	TPM_RETURNCMD   = 0x0100
 )
 
 // Modifier flags for RegisterHotKey.
@@ -62,10 +105,72 @@ const (
 	KEYEVENTF_KEYUP = 0x0002
 )
 
+var (
+	shell32              = windows.NewLazySystemDLL("shell32.dll")
+	procShellNotifyIconW = shell32.NewProc("Shell_NotifyIconW")
+)
+
 // POINT is a screen coordinate (Win32 POINT).
 type POINT struct {
 	X int32
 	Y int32
+}
+
+// HWNDMessage is the predefined message-only window handle parent.
+const HWNDMessage = ^uintptr(2) // HWND_MESSAGE = (HWND)-3
+
+// WNDCLASSEXW is the Win32 window class structure for RegisterClassExW.
+type WNDCLASSEXW struct {
+	Size       uint32
+	Style      uint32
+	WndProc    uintptr
+	ClsExtra   int32
+	WndExtra   int32
+	Instance   windows.Handle
+	Icon       windows.Handle
+	Cursor     windows.Handle
+	Background windows.Handle
+	MenuName   *uint16
+	ClassName  *uint16
+	IconSm     windows.Handle
+}
+
+// RegisterClassExW registers a window class.
+func RegisterClassExW(wc *WNDCLASSEXW) (uint16, error) {
+	r0, _, e1 := procRegisterClassExW.Call(uintptr(unsafe.Pointer(wc)))
+	if r0 == 0 {
+		return 0, e1
+	}
+	return uint16(r0), nil
+}
+
+// CreateWindowExW creates a window.
+func CreateWindowExW(exStyle uint32, className, windowName *uint16, style uint32, x, y, width, height int32, parent windows.HWND, menu windows.Handle, instance windows.Handle, param uintptr) (uintptr, error) {
+	r0, _, e1 := procCreateWindowExW.Call(
+		uintptr(exStyle),
+		uintptr(unsafe.Pointer(className)),
+		uintptr(unsafe.Pointer(windowName)),
+		uintptr(style),
+		uintptr(x), uintptr(y), uintptr(width), uintptr(height),
+		uintptr(parent), uintptr(menu), uintptr(instance), param)
+	if r0 == 0 {
+		return 0, e1
+	}
+	return r0, nil
+}
+
+// DestroyWindow destroys a window created by CreateWindowExW.
+func DestroyWindow(hwnd windows.HWND) error {
+	r0, _, e1 := procDestroyWindow.Call(uintptr(hwnd))
+	if r0 == 0 {
+		return e1
+	}
+	return nil
+}
+
+// PostQuitMessage posts WM_QUIT to the thread's message queue.
+func PostQuitMessage(exitCode int32) {
+	procPostQuitMessage.Call(uintptr(exitCode))
 }
 
 // MSG is the Win32 message structure.
@@ -278,4 +383,86 @@ func ReleaseDC(hwnd windows.HWND, dc windows.Handle) error {
 		return e1
 	}
 	return nil
+}
+
+// NOTIFYICONDATA is the Win32 structure for Shell_NotifyIconW. Only the
+// fields up to SzTip are needed (icon + tooltip + callback message); the
+// struct size matches NOTIFYICONDATA_V2 on both amd64 and 386.
+type NOTIFYICONDATA struct {
+	CbSize           uint32
+	HWnd             windows.HWND
+	UID              uint32
+	UFlags           uint32
+	UCallbackMessage uint32
+	HIcon            windows.Handle
+	SzTip            [128]uint16
+}
+
+// Shell_NotifyIconW sends a taskbar icon operation (add/modify/delete).
+func Shell_NotifyIconW(dwMessage uint32, nid *NOTIFYICONDATA) error {
+	r0, _, e1 := procShellNotifyIconW.Call(uintptr(dwMessage), uintptr(unsafe.Pointer(nid)))
+	if r0 == 0 {
+		return e1
+	}
+	return nil
+}
+
+// CreateIconFromResource creates an HICON from raw RT_ICON resource
+// bytes (BITMAPINFOHEADER + BGRA + AND mask, NOT the ICO file wrapper).
+// icon.RawImageData provides such bytes.
+func CreateIconFromResource(iconData []byte) (windows.Handle, error) {
+	// Base version: CreateIconFromResource(presbits, dwResSize, fIcon, dwVer).
+	// dwVer 0x00030000 is the version constant for icons.
+	r0, _, e1 := procCreateIconFromResource.Call(
+		uintptr(unsafe.Pointer(&iconData[0])),
+		uintptr(len(iconData)),
+		uintptr(1),          // fIcon = TRUE (icon, not cursor)
+		uintptr(0x00030000)) // dwVer: version for icons
+	if r0 == 0 {
+		return 0, e1
+	}
+	return windows.Handle(r0), nil
+}
+
+// CreatePopupMenu creates an empty popup menu.
+func CreatePopupMenu() windows.Handle {
+	r0, _, _ := procCreatePopupMenu.Call()
+	return windows.Handle(r0)
+}
+
+// AppendMenuW appends a string item or separator to a menu.
+func AppendMenuW(menu windows.Handle, flags uint32, id uintptr, text *uint16) error {
+	r0, _, e1 := procAppendMenuW.Call(
+		uintptr(menu), uintptr(flags), id, uintptr(unsafe.Pointer(text)))
+	if r0 == 0 {
+		return e1
+	}
+	return nil
+}
+
+// DestroyMenu destroys a menu created by CreatePopupMenu.
+func DestroyMenu(menu windows.Handle) error {
+	r0, _, e1 := procDestroyMenu.Call(uintptr(menu))
+	if r0 == 0 {
+		return e1
+	}
+	return nil
+}
+
+// TrackPopupMenuEx wraps TrackPopupMenu (the classic API is sufficient for
+// our simple menu). It blocks until the menu closes.
+func TrackPopupMenu(menu windows.Handle, flags uint32, x, y int32, hwnd windows.HWND) uintptr {
+	r0, _, _ := procTrackPopupMenu.Call(
+		uintptr(menu), uintptr(flags),
+		uintptr(x), uintptr(y),
+		uintptr(0), uintptr(hwnd), uintptr(0))
+	return r0
+}
+
+// RegisterWindowMessageW returns the message id for a system-wide string
+// message; used to detect TaskbarCreated (explorer.exe restart) so the tray
+// icon can be re-added.
+func RegisterWindowMessageW(name *uint16) uint32 {
+	r0, _, _ := procRegisterWindowMessageW.Call(uintptr(unsafe.Pointer(name)))
+	return uint32(r0)
 }

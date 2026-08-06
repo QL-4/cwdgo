@@ -42,7 +42,12 @@ func main() {
 
 	// Tray runs on its own OS thread; the Wails main loop owns the main
 	// thread. Exiting via the tray menu quits the whole process.
-	tray.Run(p.Open, p.OpenSettings, app.Quit)
+	tray.Run(tray.Callbacks{
+		OnLeftClick: p.ToggleFromTray,
+		OnOpen:      p.Open,
+		OnSettings:  p.OpenSettings,
+		OnExit:      app.Quit,
+	})
 
 	// Global Launcher Hotkey: default Alt+X. If the OS rejects it (e.g. it
 	// is taken by another program) show a readable message and keep running
@@ -80,6 +85,7 @@ func main() {
 		},
 	})
 	if err != nil {
+		applog.Log("wails.Run failed: %v", err)
 		os.Exit(1)
 	}
 }

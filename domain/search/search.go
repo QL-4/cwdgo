@@ -41,6 +41,25 @@ func Search(entries []recentfolders.Entry, query string) []recentfolders.Entry {
 	return out
 }
 
+// Filter returns the entries matching query, preserving input order (no
+// ranking). Matching uses the same case-insensitive fuzzy logic as Search,
+// but the relative order of the input is kept — the panel shows Recent
+// Folders newest-first and must not reshuffle recorded items when several
+// match. An empty query returns all entries in input order.
+func Filter(entries []recentfolders.Entry, query string) []recentfolders.Entry {
+	if query == "" {
+		return append([]recentfolders.Entry(nil), entries...)
+	}
+	q := strings.ToLower(query)
+	out := make([]recentfolders.Entry, 0, len(entries))
+	for _, e := range entries {
+		if _, ok := bestScore(e, q); ok {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
 // matchKind classifies how the query is embedded in a target string.
 type matchKind int
 

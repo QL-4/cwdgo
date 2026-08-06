@@ -98,6 +98,18 @@ html, body {
     cursor: default;
 }
 
+/* Live filesystem discoveries (not yet bookmarked in history): tagged
+   «新». The text colour stays normal — the tag alone is the cue. */
+#results li .tag-new {
+    flex: 0 0 auto;
+    font-size: 10px;
+    line-height: 1;
+    padding: 3px 6px;
+    border-radius: 4px;
+    color: var(--bg);
+    background: var(--accent);
+}
+
 #results li .name {
     flex: 1 1 auto;
     min-width: 0;

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
@@ -14,6 +15,7 @@ import (
 	"cwdgo/domain/search"
 	"cwdgo/domain/settings"
 	"cwdgo/internal/autostart"
+	"cwdgo/internal/folderscan"
 	"cwdgo/internal/launcher"
 	"cwdgo/internal/panel"
 )
@@ -40,20 +42,25 @@ func (a *App) startup(ctx context.Context) {
 	a.panel.SetContext(ctx)
 }
 
-// Folder is the view model the panel renders for one Recent Folders entry.
-// The domain Entry derives its display name via a method that JSON does not
-// serialize, so Name and Path are projected here for the frontend.
+// Folder is the view model the panel renders for one result.
+// Recorded distinguishes entries already in Recent Folders (true) from
+// folders discovered live from the filesystem by path completion (false),
+// so the panel can render them differently. The domain Entry derives its
+// display name via a method that JSON does not serialize, so Name and Path
+// are projected here for the frontend.
 type Folder struct {
-	Name string `json:"name"`
-	Path string `json:"path"`
+	Name     string `json:"name"`
+	Path     string `json:"path"`
+	Recorded bool   `json:"recorded"`
 }
 
-// toFolders projects domain entries into the frontend view model. It always
-// returns a non-nil slice so the frontend receives [] (not null) when empty.
+// toFolders projects domain entries into the frontend view model, all marked
+// Recorded (they come from history). It always returns a non-nil slice so
+// the frontend receives [] (not null) when empty.
 func toFolders(entries []recentfolders.Entry) []Folder {
 	out := make([]Folder, 0, len(entries))
 	for _, e := range entries {
-		out = append(out, Folder{Name: e.Name(), Path: e.Path})
+		out = append(out, Folder{Name: e.Name(), Path: e.Path, Recorded: true})
 	}
 	return out
 }
@@ -64,11 +71,67 @@ func (a *App) GetRecentFolders() []Folder {
 	return toFolders(a.store.All())
 }
 
-// Search returns the Recent Folders matching query (fuzzy, case-insensitive,
-// over name and full path), best match first. An empty query returns every
-// folder newest first, so the panel reuses it to reset the list.
+// Search returns results matching query from two sources, merged and
+// de-duplicated case-insensitively:
+//
+//  1. Recent Folders fuzzy match (name + full path), in history order
+//     (newest first, NOT reordered by relevance) — these are marked
+//     Recorded.
+//  2. Filesystem path completion: the query is split into a parent directory
+//     and a name prefix (see folderscan.Split), and matching child folders
+//     are listed. Matches already in history are marked Recorded; the rest
+//     are live discoveries (Recorded=false) the panel renders distinctly so
+//     the user can bookmark them with Enter.
+//
+// An empty query returns every history folder newest first (no filesystem
+// scan), so the panel reuses it to reset the list.
 func (a *App) Search(query string) []Folder {
-	return toFolders(search.Search(a.store.All(), query))
+	query = strings.TrimSpace(query)
+	out := toFolders(search.Filter(a.store.All(), query))
+	seen := make(map[string]bool, len(out))
+	for _, f := range out {
+		seen[normPath(f.Path)] = true
+	}
+	hist := a.historyNormSet()
+	dir, prefix := folderscan.Split(query)
+	if dir != "" {
+		for _, p := range folderscan.Scan(dir, prefix) {
+			k := normPath(p)
+			if seen[k] {
+				continue
+			}
+			seen[k] = true
+			entry := recentfolders.Entry{Path: p}
+			out = append(out, Folder{Name: entry.Name(), Path: p, Recorded: hist[k]})
+		}
+	}
+	return out
+}
+
+// normPath is the case-insensitive de-dup key for a path (clean + lower).
+func normPath(p string) string {
+	return strings.ToLower(filepath.Clean(p))
+}
+
+// historyNormSet returns the set of normalized paths currently in history,
+// used to flag filesystem completions that happen to already be recorded.
+func (a *App) historyNormSet() map[string]bool {
+	set := make(map[string]bool)
+	for _, e := range a.store.All() {
+		set[normPath(e.Path)] = true
+	}
+	return set
+}
+
+// Record adds folder to the top of Recent Folders without opening it, so the
+// user can bookmark a path quickly (Enter in the panel) and then choose how
+// to open it (click / digit key). It returns an error without recording if
+// folder is not an existing directory.
+func (a *App) Record(folder string) error {
+	if !openactions.IsExistingDir(folder) {
+		return fmt.Errorf("openactions: not an existing directory: %s", folder)
+	}
+	return a.store.Record(folder)
 }
 
 // IsDirectory reports whether path is an existing directory. The panel uses

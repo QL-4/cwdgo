@@ -38,6 +38,10 @@ export function Quit() {
   return window['go']['main']['App']['Quit']();
 }
 
+export function Record(arg1) {
+  return window['go']['main']['App']['Record'](arg1);
+}
+
 export function SaveSettings(arg1, arg2) {
   return window['go']['main']['App']['SaveSettings'](arg1, arg2);
 }

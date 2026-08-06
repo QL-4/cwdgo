@@ -50,6 +50,10 @@ type Controller struct {
 	// suppressDeactivation is set briefly while we are activating the panel
 	// ourselves, so our own WM_ACTIVATE does not immediately re-hide it.
 	suppressDeactivation atomic.Bool
+	// lastHiddenAt records when the panel was last hidden, so the tray
+	// left-click toggle can tell a deliberate close from a deactivation
+	// close (clicking the tray steals focus and deactivates the panel).
+	lastHiddenAt atomic.Int64 // unix millis
 	// prevForeground is the window that was foreground just before the panel
 	// opened. It is restored on hide so dismissing the panel returns keyboard
 	// focus to whatever the user was working in, instead of leaving focus
@@ -70,8 +74,33 @@ func (c *Controller) SetContext(ctx context.Context) {
 // Open is the Launcher Hotkey / tray action. If the panel is already
 // visible it is hidden (toggle); otherwise it is shown (centred on the
 // monitor under the mouse) and the «panel-opened» event is emitted so the
-// frontend focuses the search box. Safe to call from any goroutine.
+// Open is the Launcher Hotkey / tray toggle. When the panel is visible it
+// hides; when hidden it shows. Safe to call from any goroutine.
+//
+// From the tray left-click there is a deactivation race: clicking the tray
+// icon steals focus from the panel, so WM_ACTIVATE/WM_ACTIVATEAPP fires and
+// the activation hook hides the panel asynchronously — before this call
+// observes IsWindowVisible the panel may already be hidden, making the
+// toggle re-open it every time. ToggleFromTray guards against that.
 func (c *Controller) Open() {
+	c.toggle(false)
+}
+
+// ToggleFromTray is the tray left-click entry point. It behaves like Open
+// except that, when the panel was hidden very recently (within
+// deactivationGrace), it treats that hide as the toggle's «close» half and
+// does not re-open — so clicking the tray to close actually closes.
+func (c *Controller) ToggleFromTray() {
+	c.toggle(true)
+}
+
+// deactivationGrace is how long after an auto-hide a tray click is still
+// considered the «close» half of the toggle. Picked comfortably above the
+// asynchronous hide latency observed in logs (sub-millisecond) while short
+// enough not to swallow a genuine later re-open.
+const deactivationGrace = 250 * time.Millisecond
+
+func (c *Controller) toggle(fromTray bool) {
 	if c.ctx == nil {
 		return
 	}
@@ -79,10 +108,16 @@ func (c *Controller) Open() {
 	if hwnd == 0 {
 		return
 	}
-	// Toggle: a visible panel closes on a second press of the hotkey.
 	if windows.IsWindowVisible(hwnd) {
 		c.hide()
 		return
+	}
+	// Tray click path: if the panel was just auto-hidden by deactivation
+	// (clicking the tray stole focus), treat it as an intentional close.
+	if fromTray {
+		if t := c.lastHiddenAt.Load(); t > 0 && time.Since(time.UnixMilli(t)) < deactivationGrace {
+			return
+		}
 	}
 	c.show("panel-opened")
 }
@@ -200,6 +235,7 @@ func (c *Controller) hide() {
 	if c.ctx == nil {
 		return
 	}
+	c.lastHiddenAt.Store(time.Now().UnixMilli())
 	hwnd := findPanelWindow()
 	runtime.WindowHide(c.ctx)
 	// Tell the frontend the panel is no longer user-visible so it stops

@@ -22,6 +22,8 @@ export function OpenWith(arg1:string,arg2:number):Promise<void>;
 
 export function Quit():Promise<void>;
 
+export function Record(arg1:string):Promise<void>;
+
 export function SaveSettings(arg1:number,arg2:boolean):Promise<void>;
 
 export function Search(arg1:string):Promise<Array<main.Folder>>;
