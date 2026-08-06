@@ -58,12 +58,45 @@ html, body {
 }
 
 #results li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     padding: 9px 12px;
     border-radius: 6px;
+    cursor: default;
+}
+
+#results li .name {
+    flex: 1 1 auto;
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    cursor: default;
+}
+
+#results li .actions {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+#results li .sw {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 7px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--muted);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+#results li .sw kbd {
+    font-family: inherit;
+    font-size: 11px;
+    color: var(--accent);
 }
 
 #results li:hover {
@@ -74,6 +107,10 @@ html, body {
 #results li.selected:hover {
     background: rgba(244, 194, 92, 0.16);
     box-shadow: inset 3px 0 0 var(--accent);
+}
+
+#results li.selected .sw {
+    color: var(--text);
 }
 
 .empty {

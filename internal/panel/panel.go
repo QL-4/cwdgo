@@ -50,6 +50,11 @@ type Controller struct {
 	// suppressDeactivation is set briefly while we are activating the panel
 	// ourselves, so our own WM_ACTIVATE does not immediately re-hide it.
 	suppressDeactivation atomic.Bool
+	// prevForeground is the window that was foreground just before the panel
+	// opened. It is restored on hide so dismissing the panel returns keyboard
+	// focus to whatever the user was working in, instead of leaving focus
+	// dangling (SW_HIDE does not reliably restore the previous foreground).
+	prevForeground windows.HWND
 }
 
 // New creates a Controller with no context yet.
@@ -62,16 +67,37 @@ func (c *Controller) SetContext(ctx context.Context) {
 	c.installActivationHook()
 }
 
-// Open positions the panel centred on the monitor under the mouse cursor,
-// shows it, brings it to the foreground and emits «panel-opened» so the
-// frontend focuses the search box. Safe to call from any goroutine.
+// Open is the Launcher Hotkey / tray action. If the panel is already
+// visible it is hidden (toggle); otherwise it is positioned centred on the
+// monitor under the mouse cursor, shown, brought to the foreground and the
+// «panel-opened» event is emitted so the frontend focuses the search box.
+// Safe to call from any goroutine.
 func (c *Controller) Open() {
 	if c.ctx == nil {
 		return
 	}
+
+	// Capture the current foreground window BEFORE anything else: any later
+	// call (findPanelWindow, AttachThreadInput, showing our window) can
+	// perturb the foreground, so the restore target must be grabbed first.
+	// This runs on the hotkey callback, the earliest reliable point.
+	prev := windows.GetForegroundWindow()
+
 	hwnd := findPanelWindow()
 	if hwnd == 0 {
 		return
+	}
+
+	// Toggle: a visible panel closes on a second press of the hotkey.
+	if windows.IsWindowVisible(hwnd) {
+		c.hide()
+		return
+	}
+
+	// Remember the window we are about to cover (skipping ourselves), so
+	// hide() can give focus back to it.
+	if prev != 0 && prev != hwnd {
+		c.prevForeground = prev
 	}
 
 	// Allow our SetForegroundWindow: attach the panel window's thread to
@@ -143,9 +169,20 @@ func (c *Controller) installActivationHook() {
 }
 
 func (c *Controller) hide() {
-	if c.ctx != nil {
-		runtime.WindowHide(c.ctx)
+	if c.ctx == nil {
+		return
 	}
+	hwnd := findPanelWindow()
+	runtime.WindowHide(c.ctx)
+	// Tell the frontend the panel is no longer user-visible so it stops
+	// reacting to keyboard input. The deactivation that triggers this hide
+	// is Go-side, so without this event the webview would keep its key
+	// handlers armed and a stray keystroke could still open a folder.
+	runtime.EventsEmit(c.ctx, "panel-hidden")
+	// Return keyboard focus to whatever was foreground before the panel
+	// opened. SW_HIDE does not do this reliably; restoring explicitly avoids
+	// leaving focus dangling after Escape / a toggle-close.
+	c.restoreForeground(hwnd)
 }
 
 // attachToForeground attaches the panel window's thread input queue to the
@@ -175,6 +212,43 @@ func detachFromForeground(hwnd windows.HWND) {
 	}
 	fgThread, _ := windows.GetWindowThreadProcessId(foreground, nil)
 	win32.AttachThreadInput(uiThread, fgThread, false)
+}
+
+// restoreForeground returns keyboard focus to the window that was foreground
+// before the panel opened (captured in Open). It is a no-op when there was no
+// previous window or it no longer exists. SetForegroundWindow is guarded with
+// AttachThreadInput across the panel and target threads: we are now hidden so
+// we may have lost the foreground lock, and attaching lets the restore take
+// effect reliably regardless of which process owns the target window.
+func (c *Controller) restoreForeground(panel windows.HWND) {
+	target := c.prevForeground
+	c.prevForeground = 0
+	if target == 0 || !windows.IsWindow(target) || target == panel {
+		return
+	}
+
+	curFg := windows.GetForegroundWindow()
+	panelThread, _ := windows.GetWindowThreadProcessId(panel, nil)
+	targetThread, _ := windows.GetWindowThreadProcessId(target, nil)
+	fgThread := uint32(0)
+	if curFg != 0 {
+		fgThread, _ = windows.GetWindowThreadProcessId(curFg, nil)
+	}
+
+	attached1 := fgThread != 0 && fgThread != panelThread &&
+		win32.AttachThreadInput(panelThread, fgThread, true) == nil
+	attached2 := targetThread != panelThread && targetThread != fgThread &&
+		win32.AttachThreadInput(panelThread, targetThread, true) == nil
+
+	win32.BringWindowToTop(target)
+	win32.SetForegroundWindow(target)
+
+	if attached2 {
+		win32.AttachThreadInput(panelThread, targetThread, false)
+	}
+	if attached1 {
+		win32.AttachThreadInput(panelThread, fgThread, false)
+	}
 }
 
 // centeredOnMouseMonitor returns the top-left position (physical pixels)

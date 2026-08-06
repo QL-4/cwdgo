@@ -2,12 +2,17 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"cwdgo/domain/openactions"
 	"cwdgo/domain/recentfolders"
 	"cwdgo/domain/search"
+	"cwdgo/internal/launcher"
 	"cwdgo/internal/panel"
 )
 
@@ -17,13 +22,14 @@ type App struct {
 	ctx      context.Context
 	store    *recentfolders.Store
 	launcher openactions.Launcher
+	software []openactions.Software
 	panel    *panel.Controller
 }
 
-// NewApp wires the App binding to the Recent Folders store, the Explorer
-// launcher and the panel controller.
-func NewApp(store *recentfolders.Store, launcher openactions.Launcher, p *panel.Controller) *App {
-	return &App{store: store, launcher: launcher, panel: p}
+// NewApp wires the App binding to the Recent Folders store, the launcher, the
+// preset Software List and the panel controller.
+func NewApp(store *recentfolders.Store, launcher openactions.Launcher, software []openactions.Software, p *panel.Controller) *App {
+	return &App{store: store, launcher: launcher, software: software, panel: p}
 }
 
 // startup is called once when the Wails runtime is ready.
@@ -78,10 +84,68 @@ func (a *App) Open(folder string) error {
 	return openactions.Open(folder, a.launcher, a.store)
 }
 
+// GetSoftwareList returns the preset Software List the panel renders as the
+// numbered actions (keys 1-9). It is built once at startup from the apps
+// actually installed on this machine.
+func (a *App) GetSoftwareList() []openactions.Software {
+	if a.software == nil {
+		return []openactions.Software{}
+	}
+	return a.software
+}
+
+// OpenWith opens folder with the Software List entry at index (0-based, so
+// panel key 1 is index 0) and, on success, records it so it moves to the top
+// of Recent Folders — the same recency behaviour as the default Explorer
+// action. It returns an error if index is out of range, the folder is not an
+// existing directory, or the app could not be launched.
+func (a *App) OpenWith(folder string, index int) error {
+	if index < 0 || index >= len(a.software) {
+		return fmt.Errorf("openactions: no software action at index %d", index)
+	}
+	return openactions.OpenSoftware(folder, a.software[index], a.launcher, a.store)
+}
+
 // Quit shuts the application down. Safe to call from any goroutine once
 // startup has run.
 func (a *App) Quit() {
 	if a.ctx != nil {
 		runtime.Quit(a.ctx)
 	}
+}
+
+// defaultSoftware builds the preset Software List: PowerShell is always
+// available on Windows (opened with -NoExit so the shell stays open in the
+// folder); Antigravity and Trae CN are included only when their Start Menu
+// shortcut resolves to an installed executable, so any install drive/folder
+// is handled. This is platform glue (shortcut resolution / PATH probing)
+// and is not unit-tested — the Software command construction and the
+// launch/record path it feeds are tested in domain/openactions.
+func defaultSoftware() []openactions.Software {
+	out := []openactions.Software{}
+	if exeAvailable("powershell.exe") {
+		out = append(out, openactions.Software{
+			Name: "PowerShell",
+			Exe:  "powershell.exe",
+			Args: []string{"-NoExit", "-Command", "Set-Location '{folder}'"},
+		})
+	}
+	presets := launcher.ResolvePresets()
+	for _, p := range launcher.Presets {
+		if exe, ok := presets[p.Name]; ok {
+			out = append(out, openactions.Software{Name: p.Name, Exe: exe})
+		}
+	}
+	return out
+}
+
+// exeAvailable reports whether an executable is reachable: a bare name is
+// resolved via PATH (LookPath), an absolute path is checked for existence.
+func exeAvailable(exe string) bool {
+	if filepath.IsAbs(exe) {
+		info, err := os.Stat(exe)
+		return err == nil && !info.IsDir()
+	}
+	_, err := exec.LookPath(exe)
+	return err == nil
 }

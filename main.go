@@ -11,10 +11,10 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 
-	"cwdgo/domain/openactions"
 	"cwdgo/domain/recentfolders"
 	"cwdgo/internal/applog"
 	"cwdgo/internal/hotkey"
+	"cwdgo/internal/launcher"
 	"cwdgo/internal/panel"
 	"cwdgo/internal/tray"
 )
@@ -25,8 +25,9 @@ var assets embed.FS
 func main() {
 	applog.Log("cwdgo starting")
 	store := recentfolders.New(historyPath())
+	software := defaultSoftware()
 	p := panel.New()
-	app := NewApp(store, openactions.OSLauncher{}, p)
+	app := NewApp(store, launcher.OSLauncher{}, software, p)
 
 	// Tray runs on its own OS thread; the Wails main loop owns the main
 	// thread. Exiting via the tray menu quits the whole process.

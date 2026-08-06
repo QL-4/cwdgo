@@ -6,12 +6,20 @@ export function GetRecentFolders() {
   return window['go']['main']['App']['GetRecentFolders']();
 }
 
+export function GetSoftwareList() {
+  return window['go']['main']['App']['GetSoftwareList']();
+}
+
 export function IsDirectory(arg1) {
   return window['go']['main']['App']['IsDirectory'](arg1);
 }
 
 export function Open(arg1) {
   return window['go']['main']['App']['Open'](arg1);
+}
+
+export function OpenWith(arg1, arg2) {
+  return window['go']['main']['App']['OpenWith'](arg1, arg2);
 }
 
 export function Quit() {

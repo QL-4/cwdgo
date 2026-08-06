@@ -10,35 +10,18 @@ package openactions
 import (
 	"fmt"
 	"os"
-	"os/exec"
 )
 
 // ExplorerExecutable is the program that opens a folder in Windows
 // Explorer. Windows resolves it via PATHEXT from %SystemRoot% on PATH.
 const ExplorerExecutable = "explorer"
 
-// Launcher runs a program that opens a folder. OSLauncher runs it for real;
-// tests inject a fake to exercise success/failure without spawning Explorer.
+// Launcher runs a program that opens a folder. The real implementation
+// (ShellExecute-based) lives in internal/launcher, deliberately outside the
+// domain package to keep platform syscalls out of the domain. Tests inject a
+// fake to exercise success/failure without launching anything.
 type Launcher interface {
 	Launch(name string, args []string) error
-}
-
-// OSLauncher runs the command via os/exec.
-type OSLauncher struct{}
-
-// Launch starts the program detached. Explorer is a singleton: the spawned
-// process forwards the request to the running instance and exits, so Start
-// (not Run) is used — Run can block or report a misleading exit code. The
-// handle is released to avoid leaking it, since we never Wait.
-func (OSLauncher) Launch(name string, args []string) error {
-	cmd := exec.Command(name, args...)
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	if cmd.Process != nil {
-		_ = cmd.Process.Release()
-	}
-	return nil
 }
 
 // Recorder records a successful folder access. *recentfolders.Store
@@ -70,10 +53,19 @@ func IsExistingDir(path string) bool {
 // directory or the launcher fails. A recorder failure is returned too, but
 // only after the folder has already been launched.
 func Open(folder string, ln Launcher, rec Recorder) error {
+	name, args := ExplorerCommand(folder)
+	return launchAndRecord(folder, name, args, ln, rec)
+}
+
+// launchAndRecord validates folder, launches name/args via ln, and records
+// the access on success. It is the shared body of the Explorer Open and the
+// Software OpenSoftware actions, which differ only in the command. The
+// validation, launch-then-record ordering, and error wrapping are identical
+// for every Open Action.
+func launchAndRecord(folder, name string, args []string, ln Launcher, rec Recorder) error {
 	if !IsExistingDir(folder) {
 		return fmt.Errorf("openactions: not an existing directory: %s", folder)
 	}
-	name, args := ExplorerCommand(folder)
 	if err := ln.Launch(name, args); err != nil {
 		return fmt.Errorf("openactions: launch %s: %w", name, err)
 	}
