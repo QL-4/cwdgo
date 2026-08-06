@@ -22,6 +22,10 @@ export function GetSoftwareList() {
   return window['go']['main']['App']['GetSoftwareList']();
 }
 
+export function HideAfterOpen() {
+  return window['go']['main']['App']['HideAfterOpen']();
+}
+
 export function IsDirectory(arg1) {
   return window['go']['main']['App']['IsDirectory'](arg1);
 }

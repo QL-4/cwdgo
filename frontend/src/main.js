@@ -1,6 +1,6 @@
 import './style.css';
 
-import { GetRecentFolders, Search, IsDirectory, Open, Record, GetSoftwareList, OpenWith, GetSettings, SaveSettings, AddSoftware, UpdateSoftware, DeleteSoftware } from '../wailsjs/go/main/App';
+import { GetRecentFolders, Search, IsDirectory, Open, HideAfterOpen, Record, GetSoftwareList, OpenWith, GetSettings, SaveSettings, AddSoftware, UpdateSoftware, DeleteSoftware } from '../wailsjs/go/main/App';
 import { EventsOn, WindowHide } from '../wailsjs/runtime/runtime';
 
 const panel = document.getElementById('panel');
@@ -211,7 +211,11 @@ async function runAndRefresh(action) {
         return;
     }
     await load();
-    closePanel();
+    // Hide via HideAfterOpen rather than WindowHide: it tells the panel
+    // not to restore the pre-panel foreground window, so the process we
+    // just launched (Explorer / PowerShell / IDE) keeps the foreground.
+    HideAfterOpen();
+    dismiss();
 }
 
 // closePanel hides the window from the JS side (Escape, or after a successful

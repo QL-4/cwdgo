@@ -14,6 +14,8 @@ export function GetSettings():Promise<settings.Settings>;
 
 export function GetSoftwareList():Promise<Array<openactions.Software>>;
 
+export function HideAfterOpen():Promise<void>;
+
 export function IsDirectory(arg1:string):Promise<boolean>;
 
 export function Open(arg1:string):Promise<void>;

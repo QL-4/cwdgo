@@ -54,6 +54,12 @@ type Controller struct {
 	// left-click toggle can tell a deliberate close from a deactivation
 	// close (clicking the tray steals focus and deactivates the panel).
 	lastHiddenAt atomic.Int64 // unix millis
+	// skipNextRestore suppresses restoreForeground on the next hide. It is
+	// set when the panel is closed because the user just launched an app
+	// (Open/OpenWith): in that case we want the freshly launched process to
+	// keep the foreground, not the window that was foreground before the
+	// panel opened.
+	skipNextRestore atomic.Bool
 	// prevForeground is the window that was foreground just before the panel
 	// opened. It is restored on hide so dismissing the panel returns keyboard
 	// focus to whatever the user was working in, instead of leaving focus
@@ -92,6 +98,15 @@ func (c *Controller) Open() {
 // does not re-open — so clicking the tray to close actually closes.
 func (c *Controller) ToggleFromTray() {
 	c.toggle(true)
+}
+
+// HideAfterOpen hides the panel but skips the foreground restore, so the
+// process just launched by Open/OpenWith keeps the foreground instead of
+// being pushed behind the pre-panel window. The skip flag is consumed by
+// the next hide (the deactivation triggered by our own WindowHide).
+func (c *Controller) HideAfterOpen() {
+	c.skipNextRestore.Store(true)
+	c.hide()
 }
 
 // deactivationGrace is how long after an auto-hide a tray click is still
@@ -245,7 +260,13 @@ func (c *Controller) hide() {
 	runtime.EventsEmit(c.ctx, "panel-hidden")
 	// Return keyboard focus to whatever was foreground before the panel
 	// opened. SW_HIDE does not do this reliably; restoring explicitly avoids
-	// leaving focus dangling after Escape / a toggle-close.
+	// leaving focus dangling after Escape / a toggle-close. Skipped when the
+	// close follows a launch (Open/OpenWith): the new process should inherit
+	// the foreground, not the pre-panel window.
+	if c.skipNextRestore.CompareAndSwap(true, false) {
+		c.prevForeground = 0
+		return
+	}
 	c.restoreForeground(hwnd)
 }
 

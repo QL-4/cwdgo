@@ -149,6 +149,14 @@ func (a *App) Open(folder string) error {
 	return openactions.Open(folder, a.launcher, a.store)
 }
 
+// HideAfterOpen closes the panel after a successful Open/OpenWith without
+// restoring the pre-panel foreground window. The freshly launched process
+// should inherit the foreground instead of being pushed behind the window
+// the user had focused before opening the panel.
+func (a *App) HideAfterOpen() {
+	a.panel.HideAfterOpen()
+}
+
 // GetSoftwareList returns the preset Software List the panel renders as the
 // numbered actions (keys 1-9). It is built once at startup from the apps
 // actually installed on this machine.
