@@ -8,7 +8,7 @@
 
 ## Solution
 
-cwdgo 是一个 Windows 常驻托盘工具：通过 Launcher Hotkey 呼出 Launcher Panel，列出 Recent Folders，支持 fuzzy 搜索和多种 Open Action（默认资源管理器，或 Software List 中的指定应用）。设置窗口统一配置快捷键、软件列表、历史上限与开机自启。
+cwdgo 是一个 Windows 常驻托盘工具：通过 Launcher Hotkey 呼出 Launcher Panel，列出 Recent Folders，支持 fuzzy 搜索和多种 Open Action（默认资源管理器，或 Software List 中的指定应用）。搜索框可直接输入完整路径打开任意文件夹（历史为空时的自举路径）。设置窗口统一配置快捷键、软件列表、历史上限与开机自启。
 
 ## User Stories
 
@@ -16,20 +16,21 @@ cwdgo 是一个 Windows 常驻托盘工具：通过 Launcher Hotkey 呼出 Launc
 2. As a user, I want the panel to auto-focus the search box on open, so that I can start typing immediately
 3. As a user, I want Recent Folders listed newest-first by access time, so that I can find what I recently used
 4. As a user, I want fuzzy search over folder name and full path (case-insensitive), so that partial input still finds the folder
-5. As a user, I want arrow-key navigation, so that I can select entries without the mouse
-6. As a user, I want Enter to open the selected folder with the default Open Action (Explorer), so that the common case is one key away
-7. As a user, I want keys `1-9` to trigger Software List actions on the selected folder, so that I can open it in a specific app directly
-8. As a user, I want Esc or clicking outside to close the panel, so that it never lingers
-9. As a user, I want every successful Open Action to record the folder and move it to the top, so that recency stays accurate
-10. As a user, I want history capped at 50 entries with the oldest evicted, so that the list stays manageable
-11. As a user, I want to configure the Launcher Hotkey (default `Alt+X`, with `Win+Q` offered as a preset option), so that it doesn't clash with my setup
-12. As a user, I want to manage the Software List (name, executable path, arguments) in settings, so that I can open folders with my own tools
-13. As a user, I want PowerShell preloaded in the Software List (always) and Antigravity / Trae CN preloaded when installed, so that setup is fast
-14. As a user, I want to adjust the history cap in settings, so that I control how much is remembered
-15. As a user, I want an auto-start-with-Windows toggle (default off), so that the tool is always available if I want it
-16. As a user, I want settings persisted across restarts, so that my configuration survives
-17. As a user, I want a tray icon with a menu (open panel, settings, quit), so that the app is always reachable
-18. As a user, I want a friendly empty state when there is no history yet, so that first run isn't confusing
+5. As a user, I want to type or paste a full folder path into the search box and press Enter, so that I can open any folder even when history is empty, and it gets recorded as a Recent Folder
+6. As a user, I want arrow-key navigation, so that I can select entries without the mouse
+7. As a user, I want Enter to open the selected folder with the default Open Action (Explorer), so that the common case is one key away
+8. As a user, I want keys `1-9` to trigger Software List actions on the selected folder, so that I can open it in a specific app directly
+9. As a user, I want Esc or clicking outside to close the panel, so that it never lingers
+10. As a user, I want every successful Open Action to record the folder and move it to the top, so that recency stays accurate
+11. As a user, I want history capped at 50 entries with the oldest evicted, so that the list stays manageable
+12. As a user, I want to configure the Launcher Hotkey (default `Alt+X`, with `Win+Q` offered as a preset option), so that it doesn't clash with my setup
+13. As a user, I want to manage the Software List (name, executable path, arguments) in settings, so that I can open folders with my own tools
+14. As a user, I want PowerShell preloaded in the Software List (always) and Antigravity / Trae CN preloaded when installed, so that setup is fast
+15. As a user, I want to adjust the history cap in settings, so that I control how much is remembered
+16. As a user, I want an auto-start-with-Windows toggle (default off), so that the tool is always available if I want it
+17. As a user, I want settings persisted across restarts, so that my configuration survives
+18. As a user, I want a tray icon with a menu (open panel, settings, quit), so that the app is always reachable
+19. As a user, I want a friendly empty state when there is no history yet, so that first run isn't confusing
 
 ## Implementation Decisions
 
@@ -37,7 +38,7 @@ cwdgo 是一个 Windows 常驻托盘工具：通过 Launcher Hotkey 呼出 Launc
 - **模块划分**：Go 域逻辑包承载全部行为（RecentFoldersStore、Search、SettingsStore、OpenActions），与 Wails/systray/win32 完全解耦；Wails 层为薄绑定（方法转发 + 事件），前端为纯视图（渲染、键盘导航、调后端）。
 - **存储**：`%APPDATA%\cwdgo\` 下两个 JSON 文件（历史 + 设置），无数据库。
 - **Recent Folders 语义**：cwdgo 自跟踪；路径做大小写不敏感规范化后去重；任何 Open Action 成功即把条目置顶并刷新时间戳；上限 50，超出淘汰最旧。
-- **搜索**：fuzzy、大小写不敏感，匹配文件夹名称 + 完整路径。
+- **搜索**：fuzzy、大小写不敏感，匹配文件夹名称 + 完整路径；输入为合法目录路径时，`Enter` 直接打开该目录并记入历史（历史为空时的自举路径，story 5）。
 - **Open Action 模型**：默认动作 = 在资源管理器中打开；Software List 每个应用是一个动作，按序号对应数字键 `1-9`，超出部分可鼠标点击。执行走注入的 Launcher 接口（fake 可替换，便于测试）。
 - **Launcher Hotkey**：默认 `Alt+X`；设置中可选 `Win+Q` 或自定义组合。面板失焦自动关闭，不可配置（与 Q11 共识一致）。
 - **设置项**：全局快捷键、软件列表（名称/可执行路径/参数）、历史上限、开机自启（默认关，注册表实现）。
@@ -55,7 +56,7 @@ cwdgo 是一个 Windows 常驻托盘工具：通过 Launcher Hotkey 呼出 Launc
 
 ## Out of Scope
 
-- 全盘文件搜索（仅搜索 Recent Folders）
+- 全盘文件搜索（仅搜索 Recent Folders；输入完整路径直达打开除外，见 story 5）
 - CLI 形态（v1 只做托盘 + 面板，ADR-0002）
 - 导入系统「最近访问」记录（纯自跟踪）
 
