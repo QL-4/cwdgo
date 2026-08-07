@@ -110,24 +110,18 @@ html, body {
     background: var(--accent);
 }
 
-/* Two-line row: name (+ «新» tag) on top, full absolute path below in
-   muted small text so it stays secondary to the name. */
+/* One-line row: name (+ «新» tag) then the full absolute path in muted
+   small text, so the path is visible but secondary to the name. */
 #results li .info {
     flex: 1 1 auto;
     min-width: 0;
     display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-#results li .name-row {
-    display: flex;
     align-items: center;
-    gap: 6px;
-    min-width: 0;
+    gap: 8px;
 }
 
 #results li .name {
+    flex: 0 1 auto;
     min-width: 0;
     white-space: nowrap;
     overflow: hidden;
@@ -135,6 +129,8 @@ html, body {
 }
 
 #results li .path {
+    flex: 1 1 auto;
+    min-width: 0;
     font-size: 12px;
     color: var(--text);
     opacity: 0.60;
@@ -153,19 +149,34 @@ html, body {
 #results li .sw {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 1px 7px;
-    border-radius: 4px;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 5px;
     background: rgba(255, 255, 255, 0.04);
     color: var(--muted);
-    font-size: 12px;
+    font-size: 13px;
     cursor: pointer;
 }
 
 #results li .sw kbd {
     font-family: inherit;
-    font-size: 11px;
+    font-size: 12px;
     color: var(--accent);
+}
+
+/* The armed open method (selected with Left/Right arrow keys): an outline
+   frame on the selected row's badge — the tinted background carries most
+   of the emphasis, the frame is kept thin. */
+#results li .sw.active {
+    box-shadow: inset 0 0 0 1px var(--accent);
+    background: rgba(244, 194, 92, 0.16);
+    color: var(--accent);
+    font-weight: 600;
+}
+
+#results li .sw.active kbd {
+    color: var(--accent);
+    font-weight: 600;
 }
 
 #results li:hover {
@@ -175,6 +186,17 @@ html, body {
 #results li.selected,
 #results li.selected:hover {
     background: rgba(244, 194, 92, 0.16);
+}
+
+/* The selected row's name is bold regardless of the armed method. */
+#results li.selected .name {
+    font-weight: 600;
+}
+
+/* While the DEFAULT open method is armed (no app badge selected with
+   Left/Right arrows), the selected row keeps the left accent bar. Once an
+   app is armed the bar drops and the badge outline takes over. */
+#results li.selected.armed-default {
     box-shadow: inset 3px 0 0 var(--accent);
 }
 

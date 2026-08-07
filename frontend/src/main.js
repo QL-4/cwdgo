@@ -48,6 +48,10 @@ let selected = -1;
 let software = [];
 let visible = false;
 let view = 'panel';
+// activeAction is the currently armed open method: -1 = default Explorer,
+// 0..software.length-1 = the software entry to open with. Left/Right arrow
+// keys cycle it; Enter opens the resolved folder with it.
+let activeAction = -1;
 
 // The panel opens (hotkey or tray): switch to the panel view, clear the
 // box, focus it and reload both the folder list and the software list so
@@ -124,6 +128,24 @@ window.addEventListener('keydown', (e) => {
             e.preventDefault();
             moveSelected(-1);
             break;
+        case 'ArrowRight':
+            // While the search box has content the arrows move the caret;
+            // only an empty box (browsing the list) arms the open method.
+            if (input.value.trim() !== '') return;
+            // Cycle the armed open method forward: default -> 1 -> 2 -> ...
+            // -> last -> default. No-op when no software is configured.
+            // (activeAction+1 maps -1..n-1 to 0..n; +1 advances, -1 unwraps.)
+            e.preventDefault();
+            activeAction = (activeAction + 2) % (software.length + 1) - 1;
+            render();
+            break;
+        case 'ArrowLeft':
+            if (input.value.trim() !== '') return;
+            // Cycle backward: default <- 1 <- 2 <- ... (wraps around).
+            e.preventDefault();
+            activeAction = (activeAction + software.length + 1) % (software.length + 1) - 1;
+            render();
+            break;
         case 'Enter':
             e.preventDefault();
             openDefault();
@@ -160,6 +182,8 @@ results.addEventListener('click', (e) => {
 function moveSelected(delta) {
     if (!filtered.length) return;
     selected = Math.min(filtered.length - 1, Math.max(0, selected + delta));
+    // The armed open method (if any) is kept across row switches, so the
+    // user can pick an app once and then scan rows with Up/Down.
     render();
 }
 
@@ -173,16 +197,20 @@ async function resolveTarget() {
     return null;
 }
 
-// Enter behavior depends on whether the user is searching:
-//  - Typing something (path or query): record the resolved target to the
-//    top of Recent Folders WITHOUT opening it, then refresh so the user
-//    sees it land at the top and can choose how to open it. The panel
-//    stays open and the search box is cleared.
-//  - Empty search box (browsing history): open the selected folder with
-//    the default Explorer action, like clicking a row.
+// Enter behavior depends on the armed open method and whether the user is
+// searching:
+//  - An action was armed with Left/Right arrows (activeAction >= 0): open
+//    the resolved target with that software, like pressing its digit key.
+//  - Default action (activeAction = -1): typing something records it to the
+//    top of Recent Folders WITHOUT opening (panel stays open, box clears);
+//    an empty search box opens the selected folder in Explorer.
 async function openDefault() {
     const path = await resolveTarget();
     if (!path) return;
+    if (activeAction >= 0) {
+        runAndRefresh(() => OpenWith(path, activeAction));
+        return;
+    }
     if (input.value.trim() !== '') {
         // Searching / typed a path -> record, keep the panel open.
         try {
@@ -241,6 +269,7 @@ function closePanel() {
 function dismiss() {
     visible = false;
     selected = -1;
+    activeAction = -1;
     if (document.activeElement && document.activeElement.blur) {
         document.activeElement.blur();
     }
@@ -260,13 +289,13 @@ function render() {
         // First run / empty history: bootstrap path. Mention the app keys
         // only when at least one is configured.
         const hint = software.length
-            ? '输入路径回车记录，空搜索框回车打开所选（或按 1-9 用应用打开）'
+            ? '输入路径回车记录；← → 选择打开方式（1-9 也可），回车打开'
             : '输入路径回车记录，空搜索框回车打开所选文件夹';
         showEmpty('还没有历史记录', hint);
         return;
     }
     if (!filtered.length) {
-        showEmpty('没有匹配的文件夹', '输入完整路径按回车记录；清空搜索框回车打开所选');
+        showEmpty('没有匹配的文件夹', '输入完整路径按回车记录；← → 选择打开方式后回车打开');
         return;
     }
     empty.classList.add('hidden');
@@ -280,23 +309,19 @@ function render() {
         const info = document.createElement('div');
         info.className = 'info';
 
-        const nameRow = document.createElement('div');
-        nameRow.className = 'name-row';
-
         const name = document.createElement('span');
         name.className = 'name';
         name.textContent = folder.name || folder.path;
-        nameRow.appendChild(name);
+        info.appendChild(name);
 
         if (!folder.recorded) {
             const tag = document.createElement('span');
             tag.className = 'tag-new';
             tag.textContent = '新';
-            nameRow.appendChild(tag);
+            info.appendChild(tag);
         }
-        info.appendChild(nameRow);
 
-        const path = document.createElement('div');
+        const path = document.createElement('span');
         path.className = 'path';
         path.textContent = folder.path;
         info.appendChild(path);
@@ -309,6 +334,8 @@ function render() {
             software.forEach((sw, si) => {
                 const badge = document.createElement('span');
                 badge.className = 'sw';
+                // Only the selected row shows which open method is armed.
+                if (i === selected && si === activeAction) badge.classList.add('active');
                 badge.dataset.sw = String(si);
                 if (si <= 8) {
                     const k = document.createElement('kbd');
@@ -321,7 +348,13 @@ function render() {
             li.appendChild(actions);
         }
 
-        if (i === selected) li.classList.add('selected');
+        if (i === selected) {
+            li.classList.add('selected');
+            // The left accent bar marks the DEFAULT open method: it is
+            // shown while no app is armed (activeAction = -1) and hidden
+            // once an app badge is armed with Left/Right arrows.
+            if (activeAction === -1) li.classList.add('armed-default');
+        }
         frag.appendChild(li);
     });
     results.appendChild(frag);
