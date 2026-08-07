@@ -173,22 +173,31 @@ async function resolveTarget() {
     return null;
 }
 
-// Enter: record the resolved target to the top of Recent Folders WITHOUT
-// opening it, then refresh so the user sees it land at the top and can
-// choose how to open it (click the row / press a digit key). The panel
-// stays open and the search box is cleared back to the full list.
+// Enter behavior depends on whether the user is searching:
+//  - Typing something (path or query): record the resolved target to the
+//    top of Recent Folders WITHOUT opening it, then refresh so the user
+//    sees it land at the top and can choose how to open it. The panel
+//    stays open and the search box is cleared.
+//  - Empty search box (browsing history): open the selected folder with
+//    the default Explorer action, like clicking a row.
 async function openDefault() {
     const path = await resolveTarget();
     if (!path) return;
-    try {
-        await Record(path);
-        input.value = '';
-        await load();
-        input.focus();
-    } catch (err) {
-        console.error('record failed:', err);
-        showEmpty('无法记录该文件夹', String(err));
+    if (input.value.trim() !== '') {
+        // Searching / typed a path -> record, keep the panel open.
+        try {
+            await Record(path);
+            input.value = '';
+            await load();
+            input.focus();
+        } catch (err) {
+            console.error('record failed:', err);
+            showEmpty('无法记录该文件夹', String(err));
+        }
+        return;
     }
+    // Empty search box -> open the selected folder in Explorer.
+    runAndRefresh(() => Open(path));
 }
 
 // A digit key: open the resolved target with software[index], if that many
@@ -251,13 +260,13 @@ function render() {
         // First run / empty history: bootstrap path. Mention the app keys
         // only when at least one is configured.
         const hint = software.length
-            ? '粘贴或输入文件夹路径，回车记录到历史（或按 1-9 用应用打开）'
-            : '粘贴或输入文件夹路径，按回车记录到历史';
+            ? '输入路径回车记录，空搜索框回车打开所选（或按 1-9 用应用打开）'
+            : '输入路径回车记录，空搜索框回车打开所选文件夹';
         showEmpty('还没有历史记录', hint);
         return;
     }
     if (!filtered.length) {
-        showEmpty('没有匹配的文件夹', '输入完整路径，按回车记录到历史');
+        showEmpty('没有匹配的文件夹', '输入完整路径按回车记录；清空搜索框回车打开所选');
         return;
     }
     empty.classList.add('hidden');
@@ -268,17 +277,31 @@ function render() {
         li.title = folder.path;
         if (!folder.recorded) li.classList.add('unrecorded');
 
+        const info = document.createElement('div');
+        info.className = 'info';
+
+        const nameRow = document.createElement('div');
+        nameRow.className = 'name-row';
+
         const name = document.createElement('span');
         name.className = 'name';
         name.textContent = folder.name || folder.path;
-        li.appendChild(name);
+        nameRow.appendChild(name);
 
         if (!folder.recorded) {
             const tag = document.createElement('span');
             tag.className = 'tag-new';
             tag.textContent = '新';
-            li.appendChild(tag);
+            nameRow.appendChild(tag);
         }
+        info.appendChild(nameRow);
+
+        const path = document.createElement('div');
+        path.className = 'path';
+        path.textContent = folder.path;
+        info.appendChild(path);
+
+        li.appendChild(info);
 
         if (software.length) {
             const actions = document.createElement('span');

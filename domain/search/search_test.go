@@ -47,13 +47,57 @@ func TestMatchesFolderNameCaseInsensitively(t *testing.T) {
 	}
 }
 
-func TestMatchesFullPathWhenNameDoesNot(t *testing.T) {
+// A non-path query (no drive letter / UNC prefix) matches the folder name
+// ONLY — full paths are not scanned. Keeps plain search results clean:
+// typing a project name should never surface folders whose *parent*
+// directory happens to contain the query.
+func TestNameOnlyQueryDoesNotMatchFullPath(t *testing.T) {
+	in := []recentfolders.Entry{
+		entry(`C:\Users\jerem\Documents`), // name "Documents" has no "users"
+	}
+	if got := search.Search(in, "users"); len(got) != 0 {
+		t.Fatalf("Search(%q) = %v, want no matches (name only)", "users", paths(got))
+	}
+}
+
+// An absolute path query (drive letter + separator, or UNC) matches the
+// full path as well as the name, so path fragments still find folders.
+func TestAbsolutePathQueryMatchesFullPath(t *testing.T) {
 	in := []recentfolders.Entry{
 		entry(`C:\Users\jerem\Documents`), // name "Documents" doesn't match; path does
 	}
-	got := search.Search(in, "users")
+	got := search.Search(in, `C:\Users`)
 	if len(got) != 1 || got[0].Path != `C:\Users\jerem\Documents` {
-		t.Fatalf("Search(%q) = %v, want path match", "users", paths(got))
+		t.Fatalf("Search(%q) = %v, want path match", `C:\Users`, paths(got))
+	}
+}
+
+func TestAbsolutePathQueryWithForwardSlashMatchesFullPath(t *testing.T) {
+	in := []recentfolders.Entry{
+		entry(`C:\Users\jerem\Documents`),
+	}
+	got := search.Search(in, `c:/users`)
+	if len(got) != 1 || got[0].Path != `C:\Users\jerem\Documents` {
+		t.Fatalf("Search(%q) = %v, want path match", `c:/users`, paths(got))
+	}
+}
+
+func TestUNCQueryMatchesFullPath(t *testing.T) {
+	in := []recentfolders.Entry{
+		entry(`\\server\share\docs`),
+	}
+	got := search.Search(in, `\\server`)
+	if len(got) != 1 || got[0].Path != `\\server\share\docs` {
+		t.Fatalf("Search(%q) = %v, want path match", `\\server`, paths(got))
+	}
+}
+
+func TestFilterHonorsNameOnlyForNonPathQueries(t *testing.T) {
+	in := []recentfolders.Entry{
+		entry(`C:\Users\jerem\Documents`), // name "Documents" doesn't contain "users"
+	}
+	if got := search.Filter(in, "users"); len(got) != 0 {
+		t.Fatalf("Filter(%q) = %v, want no matches (name only)", "users", paths(got))
 	}
 }
 
@@ -77,18 +121,6 @@ func TestExactNameMatchRanksAboveFuzzyNameMatch(t *testing.T) {
 	want := []string{`C:\b\docs`, `C:\a\documents`}
 	if !reflect.DeepEqual(paths(got), want) {
 		t.Fatalf("Search(%q) = %v, want %v", "docs", paths(got), want)
-	}
-}
-
-func TestNameMatchRanksAbovePathOnlyMatch(t *testing.T) {
-	in := []recentfolders.Entry{
-		entry(`C:\Program Files\SomeApp`), // name "SomeApp"; path contains "pro"
-		entry(`D:\work\proj`),             // name "proj" starts with "pro"
-	}
-	got := search.Search(in, "pro")
-	want := []string{`D:\work\proj`, `C:\Program Files\SomeApp`}
-	if !reflect.DeepEqual(paths(got), want) {
-		t.Fatalf("Search(%q) = %v, want %v", "pro", paths(got), want)
 	}
 }
 

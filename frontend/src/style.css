@@ -110,9 +110,34 @@ html, body {
     background: var(--accent);
 }
 
-#results li .name {
+/* Two-line row: name (+ «新» tag) on top, full absolute path below in
+   muted small text so it stays secondary to the name. */
+#results li .info {
     flex: 1 1 auto;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+#results li .name-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+#results li .name {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#results li .path {
+    font-size: 12px;
+    color: var(--text);
+    opacity: 0.60;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

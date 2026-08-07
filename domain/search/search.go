@@ -15,11 +15,17 @@ import (
 // path-only matches; within a domain, exact > prefix > substring > fuzzy;
 // then earlier start, fewer gaps, shorter target. Ties keep input order.
 // An empty query returns all entries in input order.
+//
+// The full path is only scanned when the query is itself an absolute path
+// (drive letter + separator, or UNC). Plain name queries match the folder
+// name only, so typing a project name never surfaces folders whose parent
+// directory happens to contain the query.
 func Search(entries []recentfolders.Entry, query string) []recentfolders.Entry {
 	if query == "" {
 		return append([]recentfolders.Entry(nil), entries...)
 	}
 	q := strings.ToLower(query)
+	matchPath := IsAbsolutePath(q)
 
 	type scored struct {
 		entry recentfolders.Entry
@@ -27,7 +33,7 @@ func Search(entries []recentfolders.Entry, query string) []recentfolders.Entry {
 	}
 	matched := make([]scored, 0, len(entries))
 	for _, e := range entries {
-		if s, ok := bestScore(e, q); ok {
+		if s, ok := bestScore(e, q, matchPath); ok {
 			matched = append(matched, scored{e, s})
 		}
 	}
@@ -45,19 +51,36 @@ func Search(entries []recentfolders.Entry, query string) []recentfolders.Entry {
 // ranking). Matching uses the same case-insensitive fuzzy logic as Search,
 // but the relative order of the input is kept — the panel shows Recent
 // Folders newest-first and must not reshuffle recorded items when several
-// match. An empty query returns all entries in input order.
+// match. An empty query returns all entries in input order. Like Search,
+// the full path is only scanned for absolute-path queries.
 func Filter(entries []recentfolders.Entry, query string) []recentfolders.Entry {
 	if query == "" {
 		return append([]recentfolders.Entry(nil), entries...)
 	}
 	q := strings.ToLower(query)
+	matchPath := IsAbsolutePath(q)
 	out := make([]recentfolders.Entry, 0, len(entries))
 	for _, e := range entries {
-		if _, ok := bestScore(e, q); ok {
+		if _, ok := bestScore(e, q, matchPath); ok {
 			out = append(out, e)
 		}
 	}
 	return out
+}
+
+// IsAbsolutePath reports whether the query looks like an absolute Windows
+// path: a drive letter followed by a separator ("C:\" / "c:/"), or a UNC
+// share ("\\server", "//server"). Only such queries scan the full path
+// during matching; everything else matches folder names only.
+func IsAbsolutePath(q string) bool {
+	if len(q) >= 3 && isAlpha(q[0]) && q[1] == ':' && (q[2] == '\\' || q[2] == '/') {
+		return true
+	}
+	return strings.HasPrefix(q, `\\`) || strings.HasPrefix(q, "//")
+}
+
+func isAlpha(b byte) bool {
+	return ('a' <= b && b <= 'z') || ('A' <= b && b <= 'Z')
 }
 
 // matchKind classifies how the query is embedded in a target string.
@@ -96,18 +119,25 @@ func less(a, b score) bool {
 }
 
 // bestScore returns the best match of the folded query q against the entry,
-// preferring the folder name over the full path.
-func bestScore(e recentfolders.Entry, q string) (score, bool) {
+// preferring the folder name over the full path. The full path is only
+// considered when matchPath is true (absolute-path queries).
+func bestScore(e recentfolders.Entry, q string, matchPath bool) (score, bool) {
 	if kind, start, gaps, length, ok := match(e.Name(), q); ok {
 		return score{domain: 0, kind: kind, start: start, gaps: gaps, length: length}, true
+	}
+	if !matchPath {
+		return score{}, false
 	}
 	kind, start, gaps, length, ok := match(e.Path, q)
 	return score{domain: 1, kind: kind, start: start, gaps: gaps, length: length}, ok
 }
 
 // match scores how well the folded query q matches target (case-insensitive).
+// Path separators are normalized (/ and \ are equivalent) so queries typed
+// with forward slashes still match backslash paths.
 func match(target, q string) (kind matchKind, start, gaps, length int, ok bool) {
-	t := strings.ToLower(target)
+	t := strings.ToLower(strings.ReplaceAll(target, "/", `\`))
+	q = strings.ToLower(strings.ReplaceAll(q, "/", `\`))
 	tr := []rune(t)
 	qr := []rune(q)
 	if len(qr) > len(tr) {
