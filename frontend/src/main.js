@@ -150,6 +150,22 @@ window.addEventListener('keydown', (e) => {
             e.preventDefault();
             openDefault();
             break;
+        case 'Tab':
+            // While searching: complete the search box with the selected
+            // folder's full path, then re-filter so the list shows that
+            // exact target. Pressing Enter afterwards records/opens it.
+            e.preventDefault();
+            if (input.value.trim() !== '' && filtered.length && selected >= 0) {
+                input.value = filtered[selected].path;
+                Search(input.value.trim())
+                    .then((list) => {
+                        filtered = list || [];
+                        selected = filtered.length ? 0 : -1;
+                        render();
+                    })
+                    .catch((err) => console.error('Search failed:', err));
+            }
+            break;
     }
 });
 
@@ -187,13 +203,16 @@ function moveSelected(delta) {
     render();
 }
 
-// resolveTarget picks the folder an action acts on: if the search box holds a
-// real directory path, use that (bootstrap any folder — spec story 5, works
-// even with empty history); otherwise use the selected entry.
+// resolveTarget picks the folder an action acts on: the SELECTED entry wins
+// (its full path), so typing a query and pressing Enter records/opens the
+// highlighted result; when nothing is selected (e.g. the typed path matched
+// nothing on disk), fall back to the typed text if it is a real directory —
+// this keeps the bootstrap path working (spec story 5: open/record any
+// folder even with empty history).
 async function resolveTarget() {
+    if (selected >= 0 && filtered[selected]) return filtered[selected].path;
     const typed = cleanPath(input.value.trim());
     if (typed && (await IsDirectory(typed))) return typed;
-    if (selected >= 0 && filtered[selected]) return filtered[selected].path;
     return null;
 }
 
