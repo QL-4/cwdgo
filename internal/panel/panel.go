@@ -34,7 +34,13 @@ const gwlpWndProc = ^uintptr(3)
 const (
 	WM_ACTIVATE    = 0x0006
 	WM_ACTIVATEAPP = 0x001C
+	WM_SYSKEYUP    = 0x0105
+	WM_SYSCOMMAND  = 0x0112
+
 	waInactive     = 0
+	vkMenu         = 0x12   // VK_MENU (Alt)
+	scKeyMenu      = 0xF100 // SC_KEYMENU
+	sysCommandMask = 0xFFF0
 )
 
 var (
@@ -226,6 +232,21 @@ func (c *Controller) installActivationHook() {
 	}
 	cb := syscall.NewCallback(func(h, msg, wparam, lparam uintptr) uintptr {
 		switch msg {
+		case WM_SYSKEYUP:
+			// Alt+X is registered globally. The panel can become foreground
+			// before the Alt key-up arrives; DefWindowProc then puts this
+			// frameless window into Alt menu mode, so a later arrow key opens
+			// its system menu. Alt has no panel-specific meaning, so consume
+			// that trailing key-up instead.
+			if wparam == vkMenu {
+				return 0
+			}
+		case WM_SYSCOMMAND:
+			// Belt-and-braces: do not let the system activate a menu via Alt
+			// or F10. The panel is frameless and has no menu bar to use.
+			if wparam&sysCommandMask == scKeyMenu {
+				return 0
+			}
 		case WM_ACTIVATE:
 			if int16(wparam) == waInactive && !c.suppressDeactivation.Load() {
 				go c.hide()
@@ -380,7 +401,6 @@ func (c *Controller) waitAndForceForeground(hwnd windows.HWND) {
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
 		if windows.IsWindowVisible(hwnd) && windows.GetForegroundWindow() == hwnd {
-			c.clearMenuMode()
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -390,15 +410,4 @@ func (c *Controller) waitAndForceForeground(hwnd windows.HWND) {
 	win32.SetForegroundWindow(hwnd)
 	win32.BringWindowToTop(hwnd)
 	time.Sleep(50 * time.Millisecond)
-	c.clearMenuMode()
-}
-
-// clearMenuMode exits the Alt «menu mode» Windows enters when a hotkey
-// (Alt+X) brings a window to the foreground: even after Alt is physically
-// released, the foreground window keeps interpreting arrow keys as menu
-// navigation — pressing Up/Down pops the window system menu instead of
-// moving the selection. A synthetic Alt press+release resets that state.
-func (c *Controller) clearMenuMode() {
-	win32.KeybdEvent(0x12, 0, 0, 0)                     // VK_MENU down
-	win32.KeybdEvent(0x12, 0, win32.KEYEVENTF_KEYUP, 0) // VK_MENU up
 }
