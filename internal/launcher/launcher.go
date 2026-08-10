@@ -1,15 +1,18 @@
 // Package launcher provides the real Launcher implementation that starts
-// Open Action programs on Windows. It uses ShellExecuteW rather than
-// os/exec because cwdgo is a GUI-subsystem process (no console): a child
-// console app launched via os/exec inherits null/EOF standard handles, so
-// an interactive host like PowerShell sees a non-interactive session and
-// exits immediately regardless of -NoExit. ShellExecute launches the
-// program the way the shell does, decoupled from the parent's stdio and
-// with its own console, so the app runs as if the user double-clicked it.
+// Open Action programs on Windows. cwdgo is long-lived, so each launch builds
+// a fresh registry-derived environment block for the current user instead of
+// passing on the environment snapshot cwdgo inherited when it started.
+//
+// Programs are started with CreateProcessW and CREATE_NEW_CONSOLE. The latter
+// gives interactive console apps such as PowerShell independent standard I/O;
+// os/exec would otherwise attach os.DevNull handles because cwdgo is a GUI
+// subsystem process, making an interactive host exit immediately.
 package launcher
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"unsafe"
 
@@ -18,126 +21,184 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-var (
-	shell32           = windows.NewLazySystemDLL("shell32.dll")
-	procShellExecuteW = shell32.NewProc("ShellExecuteW")
-)
-
-// OSLauncher implements openactions.Launcher by handing the program to the
-// Windows shell via ShellExecute. It is platform glue and is not unit-tested;
-// the command construction and launch/record flow it feeds are tested in
-// domain/openactions.
+// OSLauncher implements openactions.Launcher with CreateProcessW. Unlike
+// ShellExecuteW (which inherits cwdgo's stale process environment), every
+// launch receives a new environment block built from the current system and
+// user registry settings.
 type OSLauncher struct{}
 
-// Show-window command used by ShellExecute.
-const swShowNormal = 1
-
-// Launch opens name with args as if via the shell. The "open" verb runs the
-// program normally (it also resolves bare names through PATH/App Paths and
-// absolute paths directly). args are joined into a single command line with
-// correct Windows quoting so folder paths containing spaces survive.
+// Launch starts name with args in a new console and gives it the current
+// registry-derived user environment. A bare executable name is resolved
+// against that fresh PATH/PATHEXT, so software installed after cwdgo started
+// can be launched without restarting cwdgo.
 func (OSLauncher) Launch(name string, args []string) error {
-	verb, _ := windows.UTF16PtrFromString("open")
-	file, _ := windows.UTF16PtrFromString(name)
-	params, _ := windows.UTF16PtrFromString(buildParams(args))
-
-	hinst, _, _ := procShellExecuteW.Call(0,
-		uintptr(unsafe.Pointer(verb)),
-		uintptr(unsafe.Pointer(file)),
-		uintptr(unsafe.Pointer(params)),
-		0,
-		uintptr(swShowNormal),
-	)
-	// ShellExecute returns an HINSTANCE result; values <= 32 are error codes.
-	if hinst <= 32 {
-		return fmt.Errorf("launcher: %s", shellExecuteError(hinst))
+	token := windows.GetCurrentProcessToken()
+	var envBlock *uint16
+	if err := windows.CreateEnvironmentBlock(&envBlock, token, false); err != nil {
+		return fmt.Errorf("launcher: build environment block: %w", err)
 	}
+	defer windows.DestroyEnvironmentBlock(envBlock)
+
+	exe, err := resolveExecutable(name, environmentStrings(envBlock))
+	if err != nil {
+		return fmt.Errorf("launcher: resolve %s: %w", name, err)
+	}
+	exe, args, err = nativeCommand(exe, args)
+	if err != nil {
+		return fmt.Errorf("launcher: prepare %s: %w", name, err)
+	}
+	app, err := windows.UTF16PtrFromString(exe)
+	if err != nil {
+		return fmt.Errorf("launcher: executable path: %w", err)
+	}
+	commandLine, err := windows.UTF16PtrFromString(windows.ComposeCommandLine(append([]string{exe}, args...)))
+	if err != nil {
+		return fmt.Errorf("launcher: command line: %w", err)
+	}
+
+	startup := windows.StartupInfo{Cb: uint32(unsafe.Sizeof(windows.StartupInfo{}))}
+	var process windows.ProcessInformation
+	if err := windows.CreateProcess(
+		app,
+		commandLine,
+		nil,
+		nil,
+		false,
+		windows.CREATE_NEW_CONSOLE|windows.CREATE_UNICODE_ENVIRONMENT,
+		envBlock,
+		nil,
+		&startup,
+		&process,
+	); err != nil {
+		return fmt.Errorf("launcher: start %s: %w", exe, err)
+	}
+	windows.CloseHandle(process.Thread)
+	windows.CloseHandle(process.Process)
 	return nil
 }
 
-// buildParams joins args into a single Windows command-line string, quoting
-// any arg that contains whitespace or quotes per the CommandLineToArgvW
-// rules. An empty arg slice yields "".
-func buildParams(args []string) string {
-	parts := make([]string, len(args))
-	for i, a := range args {
-		parts[i] = quoteArg(a)
+// environmentStrings projects a CreateEnvironmentBlock result into the form
+// used by executable resolution. The block remains owned by the caller.
+func environmentStrings(block *uint16) []string {
+	var env []string
+	const elementSize = unsafe.Sizeof(*block)
+	for *block != 0 {
+		end := unsafe.Pointer(block)
+		for *(*uint16)(end) != 0 {
+			end = unsafe.Add(end, elementSize)
+		}
+		entry := unsafe.Slice(block, (uintptr(end)-uintptr(unsafe.Pointer(block)))/elementSize)
+		env = append(env, windows.UTF16ToString(entry))
+		block = (*uint16)(unsafe.Add(end, elementSize))
 	}
-	return strings.Join(parts, " ")
+	return env
 }
 
-// needsQuoting reports whether arg must be wrapped in quotes on a Windows
-// command line.
-func needsQuoting(s string) bool {
-	if s == "" {
-		return true
+// resolveExecutable resolves a bare command name against PATH and PATHEXT from
+// env. Names that already contain a directory are checked directly (plus
+// PATHEXT candidates when no extension is present).
+func resolveExecutable(name string, env []string) (string, error) {
+	if name == "" {
+		return "", fmt.Errorf("empty executable name")
 	}
-	return strings.ContainsAny(s, " \t\n\r\v\"")
-}
-
-// quoteArg wraps s in quotes when it needs quoting, escaping backslashes
-// that precede an embedded or the closing quote (the standard algorithm).
-func quoteArg(s string) string {
-	if !needsQuoting(s) {
-		return s
+	paths := []string{""}
+	if !strings.ContainsAny(name, `:\/`) {
+		paths = executableSearchDirs(env)
 	}
-	var b strings.Builder
-	b.WriteByte('"')
-	slashes := 0
-	for i := 0; i < len(s); i++ {
-		switch s[i] {
-		case '\\':
-			slashes++
-		case '"':
-			// Double the run of backslashes preceding the quote, then escape
-			// the quote itself.
-			for j := 0; j < slashes*2; j++ {
-				b.WriteByte('\\')
+	exts := executableExtensions(name, envValue(env, "PATHEXT"))
+	for _, dir := range paths {
+		candidate := name
+		if dir != "" {
+			candidate = filepath.Join(dir, name)
+		}
+		for _, ext := range exts {
+			path := candidate + ext
+			info, err := os.Stat(path)
+			if err == nil && !info.IsDir() {
+				abs, err := filepath.Abs(path)
+				if err != nil {
+					return "", err
+				}
+				return abs, nil
 			}
-			b.WriteString(`\"`)
-			slashes = 0
-		default:
-			for j := 0; j < slashes; j++ {
-				b.WriteByte('\\')
-			}
-			slashes = 0
-			b.WriteByte(s[i])
 		}
 	}
-	// Double trailing backslashes so they are not taken as escaping the
-	// closing quote.
-	for j := 0; j < slashes*2; j++ {
-		b.WriteByte('\\')
-	}
-	b.WriteByte('"')
-	return b.String()
+	return "", os.ErrNotExist
 }
 
-// shellExecuteError maps a ShellExecute HINSTANCE error code (<=32) to a
-// readable message. See ShellExecute documentation.
-func shellExecuteError(hinst uintptr) string {
-	switch hinst {
-	case 0:
-		return "out of memory"
-	case 2:
-		return "file not found"
-	case 3:
-		return "path not found"
-	case 5:
-		return "access denied"
-	case 8, 26:
-		return "not enough memory / share error"
-	case 27:
-		return "incomplete file association"
-	case 28, 29, 30:
-		return "DDE failure"
-	case 31:
-		return "no application associated with this file"
-	case 32:
-		return "DLL not found"
-	default:
-		return fmt.Sprintf("ShellExecute error %d", hinst)
+// executableSearchDirs approximates CreateProcess's executable search order,
+// but uses PATH from the fresh environment instead of cwdgo's process.
+func executableSearchDirs(env []string) []string {
+	dirs := []string{}
+	if exe, err := os.Executable(); err == nil {
+		dirs = append(dirs, filepath.Dir(exe))
 	}
+	if cwd, err := os.Getwd(); err == nil {
+		dirs = append(dirs, cwd)
+	}
+	if systemDir, err := windows.GetSystemDirectory(); err == nil {
+		dirs = append(dirs, systemDir)
+	}
+	if windowsDir, err := windows.GetWindowsDirectory(); err == nil {
+		dirs = append(dirs, filepath.Join(windowsDir, "System"), windowsDir)
+	}
+	dirs = append(dirs, filepath.SplitList(envValue(env, "PATH"))...)
+	return dirs
+}
+
+// nativeCommand turns a batch-file action into an explicit invocation of the
+// trusted system command interpreter. CreateProcess cannot execute .cmd/.bat
+// files directly, unlike ShellExecute.
+func nativeCommand(exe string, args []string) (string, []string, error) {
+	ext := strings.ToLower(filepath.Ext(exe))
+	if ext != ".cmd" && ext != ".bat" {
+		return exe, args, nil
+	}
+	systemDir, err := windows.GetSystemDirectory()
+	if err != nil {
+		return "", nil, err
+	}
+	cmd := filepath.Join(systemDir, "cmd.exe")
+	return cmd, append([]string{"/d", "/c", exe}, args...), nil
+}
+
+// executableExtensions returns the suffixes to probe. A name that already has
+// an extension is tried as-is first; extensionless names use fresh PATHEXT.
+func executableExtensions(name, pathExt string) []string {
+	if filepath.Ext(name) != "" {
+		return []string{""}
+	}
+	if pathExt == "" {
+		pathExt = ".COM;.EXE;.BAT;.CMD"
+	}
+	exts := make([]string, 0, 4)
+	for _, ext := range filepath.SplitList(pathExt) {
+		ext = strings.TrimSpace(ext)
+		if ext == "" {
+			continue
+		}
+		if ext[0] != '.' {
+			ext = "." + ext
+		}
+		exts = append(exts, ext)
+	}
+	return exts
+}
+
+// envValue reads one value from a Windows environment slice
+// case-insensitively. Hidden drive-current-directory entries (=C:=...) are
+// ignored because they are not normal variables.
+func envValue(env []string, name string) string {
+	for _, entry := range env {
+		if strings.HasPrefix(entry, "=") {
+			continue
+		}
+		key, value, ok := strings.Cut(entry, "=")
+		if ok && strings.EqualFold(key, name) {
+			return value
+		}
+	}
+	return ""
 }
 
 // Compile-time check that OSLauncher satisfies the domain Launcher seam.

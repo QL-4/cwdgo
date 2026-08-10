@@ -187,7 +187,7 @@ cwdgo/
 │   ├── tray/                #   native Win32 tray (left=toggle, right=menu)
 │   ├── hotkey/              #   global Alt+X via RegisterHotKey
 │   ├── panel/               #   window positioning + deactivation handling
-│   ├── launcher/            #   ShellExecuteW + IDE detection
+│   ├── launcher/            #   fresh-environment CreateProcessW + IDE detection
 │   ├── folderscan/          #   filesystem path completion
 │   ├── win32/               #   NOTIFYICONDATA, popup menu, etc.
 │   ├── icon/                #   embedded icon → HICON

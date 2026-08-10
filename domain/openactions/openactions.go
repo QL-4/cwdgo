@@ -3,8 +3,8 @@
 // Software List actions (ticket 04) will reuse the same Launcher seam.
 //
 // Behaviour that matters — command construction and the launch/record
-// orchestration — lives here and is unit-tested. The real OS launcher is a
-// thin, untested wrapper around os/exec.
+// orchestration — lives here and is unit-tested. The real OS launcher is
+// isolated in internal/launcher behind the Launcher seam.
 package openactions
 
 import (
@@ -16,10 +16,10 @@ import (
 // Explorer. Windows resolves it via PATHEXT from %SystemRoot% on PATH.
 const ExplorerExecutable = "explorer"
 
-// Launcher runs a program that opens a folder. The real implementation
-// (ShellExecute-based) lives in internal/launcher, deliberately outside the
-// domain package to keep platform syscalls out of the domain. Tests inject a
-// fake to exercise success/failure without launching anything.
+// Launcher runs a program that opens a folder. The real Windows implementation
+// lives in internal/launcher, deliberately outside the domain package to keep
+// platform syscalls out of the domain. Tests inject a fake to exercise
+// success/failure without launching anything.
 type Launcher interface {
 	Launch(name string, args []string) error
 }
