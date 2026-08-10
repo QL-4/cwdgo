@@ -103,6 +103,12 @@ window.addEventListener('keydown', (e) => {
     if (!visible) {
         return;
     }
+    // While Alt is held the OS is in menu mode: arrow keys would open the
+    // window system menu, so ignore all panel shortcuts (the Go side also
+    // clears that mode after the panel activates).
+    if (e.altKey) {
+        return;
+    }
     // Esc closes the window from either view.
     if (e.key === 'Escape') {
         closePanel();

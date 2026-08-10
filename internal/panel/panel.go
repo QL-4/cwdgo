@@ -380,6 +380,7 @@ func (c *Controller) waitAndForceForeground(hwnd windows.HWND) {
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
 		if windows.IsWindowVisible(hwnd) && windows.GetForegroundWindow() == hwnd {
+			c.clearMenuMode()
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -389,4 +390,15 @@ func (c *Controller) waitAndForceForeground(hwnd windows.HWND) {
 	win32.SetForegroundWindow(hwnd)
 	win32.BringWindowToTop(hwnd)
 	time.Sleep(50 * time.Millisecond)
+	c.clearMenuMode()
+}
+
+// clearMenuMode exits the Alt «menu mode» Windows enters when a hotkey
+// (Alt+X) brings a window to the foreground: even after Alt is physically
+// released, the foreground window keeps interpreting arrow keys as menu
+// navigation — pressing Up/Down pops the window system menu instead of
+// moving the selection. A synthetic Alt press+release resets that state.
+func (c *Controller) clearMenuMode() {
+	win32.KeybdEvent(0x12, 0, 0, 0)                     // VK_MENU down
+	win32.KeybdEvent(0x12, 0, win32.KEYEVENTF_KEYUP, 0) // VK_MENU up
 }
