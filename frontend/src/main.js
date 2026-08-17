@@ -222,13 +222,16 @@ async function resolveTarget() {
     return null;
 }
 
-// Enter behavior depends on the armed open method and whether the user is
-// searching:
+// Enter behavior depends on the armed open method and the selected item:
 //  - An action was armed with Left/Right arrows (activeAction >= 0): open
 //    the resolved target with that software, like pressing its digit key.
-//  - Default action (activeAction = -1): typing something records it to the
-//    top of Recent Folders WITHOUT opening (panel stays open, box clears);
-//    an empty search box opens the selected folder in Explorer.
+//  - Default action, searching, and the selected item is already in the
+//    history (Recorded): open it directly in Explorer — no need to re-record
+//    something that is already at hand.
+//  - Default action, searching, and the item is a fresh filesystem discovery
+//    (or the box holds a path with no list entry): record it to the top of
+//    Recent Folders WITHOUT opening (panel stays open, box clears).
+//  - Default action, empty search box: open the selected folder in Explorer.
 async function openDefault() {
     const path = await resolveTarget();
     if (!path) return;
@@ -237,17 +240,22 @@ async function openDefault() {
         return;
     }
     if (input.value.trim() !== '') {
-        // Searching / typed a path -> record, keep the panel open.
-        try {
-            await Record(path);
-            input.value = '';
-            await load();
-            input.focus();
-        } catch (err) {
-            console.error('record failed:', err);
-            showEmpty('无法记录该文件夹', String(err));
+        const item = selected >= 0 ? filtered[selected] : null;
+        // Already-recorded items open directly; only fresh discoveries
+        // (or a bare typed path) get recorded.
+        if (!item || !item.recorded) {
+            try {
+                await Record(path);
+                input.value = '';
+                await load();
+                input.focus();
+            } catch (err) {
+                console.error('record failed:', err);
+                showEmpty('无法记录该文件夹', String(err));
+            }
+            return;
         }
-        return;
+        // Recorded item -> fall through to open it.
     }
     // Empty search box -> open the selected folder in Explorer.
     runAndRefresh(() => Open(path));
@@ -314,8 +322,8 @@ function render() {
         // First run / empty history: bootstrap path. Mention the app keys
         // only when at least one is configured.
         const hint = software.length
-            ? '输入路径回车记录；← → 选择打开方式（1-9 也可），回车打开'
-            : '输入路径回车记录，空搜索框回车打开所选文件夹';
+            ? '回车打开已记录项 / 记录新发现；← → 选择打开方式（1-9 也可）'
+            : '回车打开已记录项，新路径回车记录';
         showEmpty('还没有历史记录', hint);
         return;
     }
