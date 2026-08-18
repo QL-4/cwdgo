@@ -83,6 +83,22 @@ func TestRecordNormalizesSeparatorsAndTrailingSlash(t *testing.T) {
 	}
 }
 
+func TestRecordNamedPreservesSSHProject(t *testing.T) {
+	s, path := newStore(t)
+	const target = `203.0.113.10:/home/server-a/QL`
+	if err := s.RecordNamed(target, "server-a"); err != nil {
+		t.Fatal(err)
+	}
+	got := s.All()
+	if len(got) != 1 || got[0].Name() != "server-a" || got[0].Path != target {
+		t.Fatalf("All() = %#v, want named SSH project", got)
+	}
+	reloaded := recentfolders.New(path).All()
+	if len(reloaded) != 1 || reloaded[0].DisplayName != "server-a" || reloaded[0].Path != target {
+		t.Fatalf("reloaded = %#v, want persisted named SSH project", reloaded)
+	}
+}
+
 func TestRecordRefreshesTimestamp(t *testing.T) {
 	s, _ := newStore(t)
 	if err := s.Record(`C:\A`); err != nil {

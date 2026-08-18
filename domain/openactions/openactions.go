@@ -10,6 +10,7 @@ package openactions
 import (
 	"fmt"
 	"os"
+	"strings"
 )
 
 // ExplorerExecutable is the program that opens a folder in Windows
@@ -38,12 +39,21 @@ func ExplorerCommand(folder string) (name string, args []string) {
 	return ExplorerExecutable, []string{folder}
 }
 
-// IsExistingDir reports whether path exists and is a directory. The panel
-// uses it to decide whether Enter should open the typed path directly
-// (bootstrap any folder — spec story 5) instead of the selected entry.
+// IsExistingDir reports whether path exists and is a local directory.
 func IsExistingDir(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.IsDir()
+}
+
+// IsSSHFolder reports whether path uses cwdgo's SSH project notation:
+// host-or-ip:/absolute/remote/path.
+func IsSSHFolder(path string) bool {
+	colon := strings.Index(path, ":/")
+	if colon <= 1 {
+		return false
+	}
+	host, remotePath := path[:colon], path[colon+1:]
+	return !strings.ContainsAny(host, `\\/`) && strings.HasPrefix(remotePath, "/")
 }
 
 // Open opens folder in Explorer via ln and, on a successful launch, records

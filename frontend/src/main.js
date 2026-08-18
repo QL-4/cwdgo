@@ -53,6 +53,29 @@ let view = 'panel';
 // keys cycle it; Enter opens the resolved folder with it.
 let activeAction = -1;
 
+function isSSHPath(path) {
+    return /^[^:\\/]{2,}:\//.test(path || '');
+}
+
+// SSH projects can only be opened by Trae CN. Their original action index
+// stays intact, so key 3 remains Trae CN while 1 and 2 are disabled.
+function availableActionIndexes(folderOrPath) {
+    const path = typeof folderOrPath === 'string' ? folderOrPath : folderOrPath?.path;
+    return software
+        .map((sw, index) => ({ sw, index }))
+        .filter(({ sw }) => !isSSHPath(path) || sw.name.toLowerCase() === 'trae cn')
+        .map(({ index }) => index);
+}
+
+function cycleAction(delta) {
+    if (selected < 0 || !filtered[selected]) return;
+    const choices = [-1, ...availableActionIndexes(filtered[selected])];
+    let position = choices.indexOf(activeAction);
+    if (position < 0) position = 0;
+    activeAction = choices[(position + delta + choices.length) % choices.length];
+    render();
+}
+
 // The panel opens (hotkey or tray): switch to the panel view, clear the
 // box, focus it and reload both the folder list and the software list so
 // they reflect current state.
@@ -135,22 +158,14 @@ window.addEventListener('keydown', (e) => {
             moveSelected(-1);
             break;
         case 'ArrowRight':
-            // While the search box has content the arrows move the caret;
-            // only an empty box (browsing the list) arms the open method.
             if (input.value.trim() !== '') return;
-            // Cycle the armed open method forward: default -> 1 -> 2 -> ...
-            // -> last -> default. No-op when no software is configured.
-            // (activeAction+1 maps -1..n-1 to 0..n; +1 advances, -1 unwraps.)
             e.preventDefault();
-            activeAction = (activeAction + 2) % (software.length + 1) - 1;
-            render();
+            cycleAction(1);
             break;
         case 'ArrowLeft':
             if (input.value.trim() !== '') return;
-            // Cycle backward: default <- 1 <- 2 <- ... (wraps around).
             e.preventDefault();
-            activeAction = (activeAction + software.length + 1) % (software.length + 1) - 1;
-            render();
+            cycleAction(-1);
             break;
         case 'Enter':
             e.preventDefault();
@@ -204,8 +219,8 @@ results.addEventListener('click', (e) => {
 function moveSelected(delta) {
     if (!filtered.length) return;
     selected = Math.min(filtered.length - 1, Math.max(0, selected + delta));
-    // The armed open method (if any) is kept across row switches, so the
-    // user can pick an app once and then scan rows with Up/Down.
+    const allowed = availableActionIndexes(filtered[selected]);
+    if (activeAction >= 0 && !allowed.includes(activeAction)) activeAction = -1;
     render();
 }
 
@@ -266,7 +281,8 @@ async function openDefault() {
 async function openWithKey(index) {
     if (index >= software.length) return;
     const path = await resolveTarget();
-    if (path) runAndRefresh(() => OpenWith(path, index));
+    if (!path || !availableActionIndexes(path).includes(index)) return;
+    runAndRefresh(() => OpenWith(path, index));
 }
 
 // Run an open action, then refresh (so the opened folder is bumped to the
@@ -364,11 +380,13 @@ function render() {
         if (software.length) {
             const actions = document.createElement('span');
             actions.className = 'actions';
+            const allowed = availableActionIndexes(folder);
             software.forEach((sw, si) => {
                 const badge = document.createElement('span');
                 badge.className = 'sw';
-                // Only the selected row shows which open method is armed.
-                if (i === selected && si === activeAction) badge.classList.add('active');
+                const disabled = !allowed.includes(si);
+                if (disabled) badge.classList.add('disabled');
+                if (!disabled && i === selected && si === activeAction) badge.classList.add('active');
                 badge.dataset.sw = String(si);
                 if (si <= 8) {
                     const k = document.createElement('kbd');
