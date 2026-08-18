@@ -164,6 +164,19 @@ html, body {
     color: var(--accent);
 }
 
+/* SSH projects retain unavailable actions for context, but they cannot be
+   selected or clicked because only Trae CN supports Remote SSH. */
+#results li .sw.disabled,
+#results li.selected .sw.disabled {
+    color: var(--muted);
+    opacity: 0.48;
+    cursor: not-allowed;
+}
+
+#results li .sw.disabled kbd {
+    color: inherit;
+}
+
 /* The armed open method (selected with Left/Right arrow keys): an outline
    frame on the selected row's badge — the tinted background carries most
    of the emphasis, the frame is kept thin. */

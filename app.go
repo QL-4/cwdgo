@@ -108,8 +108,13 @@ func (a *App) Search(query string) []Folder {
 	return out
 }
 
-// normPath is the case-insensitive de-dup key for a path (clean + lower).
+// normPath is the de-dup key for a local or SSH path.
 func normPath(p string) string {
+	p = strings.TrimSpace(p)
+	if openactions.IsSSHFolder(p) {
+		colon := strings.Index(p, ":/")
+		return strings.ToLower(p[:colon]) + p[colon:]
+	}
 	return strings.ToLower(filepath.Clean(p))
 }
 
@@ -128,24 +133,33 @@ func (a *App) historyNormSet() map[string]bool {
 // to open it (click / digit key). It returns an error without recording if
 // folder is not an existing directory.
 func (a *App) Record(folder string) error {
-	if !openactions.IsExistingDir(folder) {
-		return fmt.Errorf("openactions: not an existing directory: %s", folder)
+	if !openactions.IsExistingDir(folder) && !openactions.IsSSHFolder(folder) {
+		return fmt.Errorf("openactions: not an existing local or SSH directory: %s", folder)
 	}
 	return a.store.Record(folder)
 }
 
-// IsDirectory reports whether path is an existing directory. The panel uses
-// it to decide whether Enter should open the typed path directly (spec story
-// 5: open any folder by pasting its path) instead of the selected entry.
+// IsDirectory reports whether path is an existing local directory or an SSH
+// project target in host:/remote/path form.
 func (a *App) IsDirectory(path string) bool {
-	return openactions.IsExistingDir(path)
+	return openactions.IsExistingDir(path) || openactions.IsSSHFolder(path)
 }
 
-// Open opens folder in Windows Explorer and, on success, records it so it
-// moves to the top of Recent Folders. It returns an error — recording
-// nothing — if folder is not an existing directory or Explorer could not be
-// launched.
+// Open opens a local folder in Explorer. SSH projects are opened in Trae CN
+// because Explorer cannot handle their remote target notation.
 func (a *App) Open(folder string) error {
+	if openactions.IsSSHFolder(folder) {
+		entry, ok := a.store.Find(folder)
+		if !ok {
+			return fmt.Errorf("openactions: SSH project is not recorded: %s", folder)
+		}
+		for _, sw := range toActionSoftware(a.settings.Get().Software) {
+			if strings.EqualFold(sw.Name, "Trae CN") {
+				return openactions.OpenSSHSoftware(folder, entry.Name(), sw, a.launcher, a.store)
+			}
+		}
+		return fmt.Errorf("openactions: Trae CN is not configured")
+	}
 	return openactions.Open(folder, a.launcher, a.store)
 }
 

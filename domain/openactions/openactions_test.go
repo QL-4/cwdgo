@@ -122,6 +122,17 @@ func TestOpenRecorderFailureIsReportedAfterLaunch(t *testing.T) {
 	}
 }
 
+func TestIsSSHFolder(t *testing.T) {
+	if !openactions.IsSSHFolder(`172.24.245.143:/home/beishida/QL`) {
+		t.Fatal("valid SSH project path was rejected")
+	}
+	for _, value := range []string{`C:\work`, `172.24.245.143`, `:/home/test`} {
+		if openactions.IsSSHFolder(value) {
+			t.Fatalf("IsSSHFolder(%q) = true, want false", value)
+		}
+	}
+}
+
 func TestIsExistingDir(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(t.TempDir(), "afile")

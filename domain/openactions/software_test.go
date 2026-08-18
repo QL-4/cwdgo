@@ -72,6 +72,28 @@ func equalArgs(got, want []string) bool {
 	return true
 }
 
+func TestSSHFolderURI(t *testing.T) {
+	got, err := openactions.SSHFolderURI(`172.24.245.143:/home/beishida/QL`, "beishida")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "vscode-remote://ssh-remote%2B7b22686f73744e616d65223a226265697368696461222c2266726f6d436f6e666967223a747275657d/home/beishida/QL"
+	if got != want {
+		t.Fatalf("SSHFolderURI() = %q, want %q", got, want)
+	}
+}
+
+func TestRemoteCommandUsesFolderURI(t *testing.T) {
+	sw := openactions.Software{Exe: `D:\Programs\Trae CN\Trae CN.exe`}
+	name, args, err := sw.RemoteCommand(`172.24.245.143:/home/beishida/QL`, "beishida")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name != sw.Exe || len(args) != 2 || args[0] != "--folder-uri" || !strings.Contains(args[1], "/home/beishida/QL") {
+		t.Fatalf("RemoteCommand() = %q %v", name, args)
+	}
+}
+
 // --- OpenSoftware (success/failure via fake Launcher) ---
 
 func TestOpenSoftwareLaunchesCommandAndRecords(t *testing.T) {
@@ -115,6 +137,22 @@ func TestOpenSoftwarePlaceholderCommandIsLaunched(t *testing.T) {
 	wantArgs := []string{"-NoExit", "-Command", "Set-Location '" + dir + "'"}
 	if !equalArgs(ln.args, wantArgs) {
 		t.Fatalf("launcher args = %v, want %v", ln.args, wantArgs)
+	}
+}
+
+func TestOpenSSHSoftwareLaunchesRemoteURIAndRecords(t *testing.T) {
+	sw := openactions.Software{Exe: `D:\Programs\Trae CN\Trae CN.exe`}
+	var ln fakeLauncher
+	var rec fakeRecorder
+	const target = `172.24.245.143:/home/beishida/QL`
+	if err := openactions.OpenSSHSoftware(target, "beishida", sw, &ln, &rec); err != nil {
+		t.Fatal(err)
+	}
+	if ln.name != sw.Exe || len(ln.args) != 2 || ln.args[0] != "--folder-uri" {
+		t.Fatalf("launched %q %v", ln.name, ln.args)
+	}
+	if len(rec.paths) != 1 || rec.paths[0] != target {
+		t.Fatalf("recorded %v, want [%s]", rec.paths, target)
 	}
 }
 

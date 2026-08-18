@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	pathpkg "path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -19,12 +20,17 @@ const MaxEntries = 50
 
 // Entry is a single Recent Folders entry.
 type Entry struct {
-	Path     string    `json:"path"`
-	LastUsed time.Time `json:"lastUsed"`
+	DisplayName string    `json:"name,omitempty"`
+	Path        string    `json:"path"`
+	LastUsed    time.Time `json:"lastUsed"`
 }
 
-// Name returns the folder's base name (its last path segment).
+// Name returns the configured display name, or the folder's base name when
+// no explicit name is stored.
 func (e Entry) Name() string {
+	if strings.TrimSpace(e.DisplayName) != "" {
+		return e.DisplayName
+	}
 	base := filepath.Base(e.Path)
 	sep := string(filepath.Separator)
 	if base == "" || base == "." || base == sep || base == sep+sep {
@@ -74,13 +80,20 @@ func (s *Store) load() {
 	}
 }
 
-// Record records an access to the folder at path. The path is cleaned and
-// deduplicated case-insensitively: an existing entry is moved to the top with
-// a refreshed timestamp, a new entry is added at the top, and the oldest
-// entry is evicted when the list would exceed MaxEntries. The updated list is
-// persisted to disk before returning; on a persistence failure the memory
-// state is kept and the error is returned.
+// Record records an access to the folder at path, preserving any configured
+// display name already stored for it.
 func (s *Store) Record(path string) error {
+	return s.record(path, "")
+}
+
+// RecordNamed records a folder with an explicit display name. It is used for
+// targets such as SSH projects whose user-facing name is not derivable from
+// their path.
+func (s *Store) RecordNamed(path, displayName string) error {
+	return s.record(path, strings.TrimSpace(displayName))
+}
+
+func (s *Store) record(path, displayName string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -97,9 +110,12 @@ func (s *Store) Record(path string) error {
 		kept = append(kept, e)
 	}
 	if !found {
-		bumped = Entry{Path: filepath.Clean(path), LastUsed: now}
+		bumped = Entry{DisplayName: displayName, Path: clean(path), LastUsed: now}
 	} else {
-		bumped.LastUsed = now // keep first-seen casing, refresh timestamp
+		bumped.LastUsed = now
+		if displayName != "" {
+			bumped.DisplayName = displayName
+		}
 	}
 	next := append([]Entry{bumped}, kept...)
 	if len(next) > s.limit {
@@ -134,9 +150,50 @@ func (s *Store) All() []Entry {
 	return append([]Entry(nil), s.items...)
 }
 
-// normalize returns the case-insensitive dedup key for a folder path.
-func normalize(path string) string {
-	return strings.ToLower(filepath.Clean(path))
+// Find returns the recorded entry matching path.
+func (s *Store) Find(path string) (Entry, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	key := normalize(path)
+	for _, e := range s.items {
+		if normalize(e.Path) == key {
+			return e, true
+		}
+	}
+	return Entry{}, false
+}
+
+// clean preserves SSH targets in host:/remote/path form while cleaning their
+// POSIX path. Local paths retain Windows filepath semantics.
+func clean(value string) string {
+	value = strings.TrimSpace(value)
+	if host, remotePath, ok := splitSSHPath(value); ok {
+		return host + ":" + pathpkg.Clean(remotePath)
+	}
+	return filepath.Clean(value)
+}
+
+// normalize returns the dedup key for a local or SSH folder path. Windows
+// paths are case-insensitive; SSH host names are case-insensitive while their
+// remote POSIX paths remain case-sensitive.
+func normalize(value string) string {
+	value = clean(value)
+	if host, remotePath, ok := splitSSHPath(value); ok {
+		return strings.ToLower(host) + ":" + remotePath
+	}
+	return strings.ToLower(value)
+}
+
+func splitSSHPath(value string) (host, remotePath string, ok bool) {
+	colon := strings.Index(value, ":/")
+	if colon <= 1 {
+		return "", "", false
+	}
+	host, remotePath = value[:colon], value[colon+1:]
+	if strings.ContainsAny(host, `\\/`) || remotePath == "" {
+		return "", "", false
+	}
+	return host, remotePath, true
 }
 
 // persistLocked writes the current list atomically (temp file + rename) as
