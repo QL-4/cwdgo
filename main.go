@@ -17,6 +17,7 @@ import (
 	"cwdgo/internal/hotkey"
 	"cwdgo/internal/launcher"
 	"cwdgo/internal/panel"
+	"cwdgo/internal/singleinstance"
 	"cwdgo/internal/tray"
 )
 
@@ -25,6 +26,11 @@ var assets embed.FS
 
 func main() {
 	applog.Log("cwdgo starting")
+	// Replace-style single instance: a fresh start terminates any older
+	// cwdgo process (matched by executable name, so an older build from a
+	// different folder is replaced too) and waits for it to release the
+	// global hotkey and tray icon before this one starts.
+	singleinstance.ReplacePrevious()
 	hist := settings.New(settingsPath())
 	store := recentfolders.New(historyPath())
 	// Apply the persisted history cap at startup (defaults to 50 until the
