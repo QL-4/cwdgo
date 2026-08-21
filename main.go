@@ -32,13 +32,22 @@ func main() {
 	if err := store.SetLimit(hist.Get().HistoryLimit); err != nil {
 		applog.Log("settings: apply history limit at startup: %v", err)
 	}
-	// Add the configured Trae CN Remote SSH project once. Its persisted path
-	// uses the requested IP notation while DisplayName stores the SSH config
-	// alias required by Trae CN's Remote SSH URI.
-	const server-aSSHPath = "203.0.113.10:/home/server-a/QL"
-	if _, exists := store.Find(server-aSSHPath); !exists {
-		if err := store.RecordNamed(server-aSSHPath, "server-a"); err != nil {
-			applog.Log("history: seed server-a SSH project: %v", err)
+	// Add configured Trae CN Remote SSH projects once. Each persisted path
+	// uses the requested IP notation while Name stores the SSH config alias
+	// required by Trae CN's Remote SSH URI.
+	for _, project := range []struct {
+		Name string
+		Path string
+	}{
+		{Name: "server-a", Path: "203.0.113.10:/home/server-a/QL"},
+		{Name: "server-b", Path: "203.0.113.10:/home/server-b/QL"},
+		{Name: "vps", Path: "203.0.113.20:/root/QL"},
+	} {
+		if _, exists := store.Find(project.Path); exists {
+			continue
+		}
+		if err := store.RecordNamed(project.Path, project.Name); err != nil {
+			applog.Log("history: seed %s SSH project: %v", project.Name, err)
 		}
 	}
 	// Seed the Software List on first run: when settings has no software
