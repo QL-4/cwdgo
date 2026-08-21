@@ -180,13 +180,22 @@ func (a *App) GetSoftwareList() []openactions.Software {
 
 // OpenWith opens folder with the Software List entry at index (0-based, so
 // panel key 1 is index 0) and, on success, records it so it moves to the top
-// of Recent Folders — the same recency behaviour as the default Explorer
-// action. It returns an error if index is out of range, the folder is not an
-// existing directory, or the app could not be launched.
+// of Recent Folders. SSH projects may only be opened through Trae CN's
+// Remote SSH URI.
 func (a *App) OpenWith(folder string, index int) error {
 	sw := toActionSoftware(a.settings.Get().Software)
 	if index < 0 || index >= len(sw) {
 		return fmt.Errorf("openactions: no software action at index %d", index)
+	}
+	if openactions.IsSSHFolder(folder) {
+		if !strings.EqualFold(sw[index].Name, "Trae CN") {
+			return fmt.Errorf("openactions: SSH projects can only be opened with Trae CN")
+		}
+		entry, ok := a.store.Find(folder)
+		if !ok {
+			return fmt.Errorf("openactions: SSH project is not recorded: %s", folder)
+		}
+		return openactions.OpenSSHSoftware(folder, entry.Name(), sw[index], a.launcher, a.store)
 	}
 	return openactions.OpenSoftware(folder, sw[index], a.launcher, a.store)
 }
