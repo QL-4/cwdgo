@@ -12,5 +12,8 @@ frontend/dist/
 # Local scratch
 .scratch/
 
+# Editor / agent local config
+.trae/
+
 # Pi Agent
 .pi/llm-call/
