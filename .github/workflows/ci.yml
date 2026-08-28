@@ -27,6 +27,19 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # main.go embeds frontend/dist, which is gitignored and only exists
+      # after a frontend build. Without this, go vet/test cannot compile.
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm install
+          npm run build
+
       - name: go vet
         run: go vet ./...
 
@@ -58,7 +71,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
 
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
