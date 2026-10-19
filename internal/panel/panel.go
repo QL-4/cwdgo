@@ -186,7 +186,7 @@ func (c *Controller) show(emitEvent string) {
 
 	// Allow our SetForegroundWindow: attach the panel window's thread to
 	// the current foreground thread's input queue.
-	attached := attachToForeground(hwnd)
+	attachedThread := attachToForeground(hwnd)
 
 	// Move before showing so there is no flicker at the old position.
 	x, y := c.centeredOnMouseMonitor()
@@ -199,8 +199,8 @@ func (c *Controller) show(emitEvent string) {
 	c.waitAndForceForeground(hwnd)
 	c.suppressDeactivation.Store(false)
 
-	if attached {
-		detachFromForeground(hwnd)
+	if attachedThread != 0 {
+		detachFromForeground(hwnd, attachedThread)
 	}
 
 	runtime.EventsEmit(c.ctx, emitEvent)
@@ -293,30 +293,30 @@ func (c *Controller) hide() {
 
 // attachToForeground attaches the panel window's thread input queue to the
 // current foreground thread's queue, so SetForegroundWindow calls made on
-// the panel's thread are not blocked by the foreground lock.
-func attachToForeground(hwnd windows.HWND) bool {
+// the panel's thread are not blocked by the foreground lock. It returns the
+// thread it attached to (0 when nothing was attached); that id must be fed
+// back to detachFromForeground, since by then the foreground window is our
+// own and re-deriving it would leave the attachment dangling — attached
+// input queues share cursor state, so a leaked attachment makes the mouse
+// cursor vanish in the other process until cwdgo exits.
+func attachToForeground(hwnd windows.HWND) uint32 {
 	uiThread, _ := windows.GetWindowThreadProcessId(hwnd, nil)
 	foreground := windows.GetForegroundWindow()
 	if foreground == 0 {
-		return false
+		return 0
 	}
 	fgThread, _ := windows.GetWindowThreadProcessId(foreground, nil)
 	if fgThread == uiThread {
-		return false
+		return 0
 	}
 	if err := win32.AttachThreadInput(uiThread, fgThread, true); err != nil {
-		return false
+		return 0
 	}
-	return true
+	return fgThread
 }
 
-func detachFromForeground(hwnd windows.HWND) {
+func detachFromForeground(hwnd windows.HWND, fgThread uint32) {
 	uiThread, _ := windows.GetWindowThreadProcessId(hwnd, nil)
-	foreground := windows.GetForegroundWindow()
-	if foreground == 0 {
-		return
-	}
-	fgThread, _ := windows.GetWindowThreadProcessId(foreground, nil)
 	win32.AttachThreadInput(uiThread, fgThread, false)
 }
 
