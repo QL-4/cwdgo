@@ -17,7 +17,7 @@ _Avoid_: 最近打开、历史记录
 _Avoid_: 打开方式
 
 **Software List（软件列表）**:
-用户可配置的应用集合（预置 Windows PowerShell、检测到安装时的 Antigravity / Trae CN），用于以指定应用打开文件夹。
+用户可配置的应用集合（预置 Windows PowerShell、检测到安装时的 Antigravity / Trae CN / ZCode / Claude），用于以指定应用打开文件夹。Name 仅作显示，不参与任何逻辑；能否打开 SSH 项目由条目的 remoteArgs 命令模板决定——有模板即可开（模板用 {sshUri} 占位符，检测到的 Trae CN 预置自带）。
 _Avoid_: 应用列表、程序
 
 **Launcher Hotkey（启动快捷键）**:

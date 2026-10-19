@@ -165,7 +165,8 @@ html, body {
 }
 
 /* SSH projects retain unavailable actions for context, but they cannot be
-   selected or clicked because only Trae CN supports Remote SSH. */
+   selected or clicked because only software with a remote command template
+   (remoteArgs) supports Remote SSH. */
 #results li .sw.disabled,
 #results li.selected .sw.disabled {
     color: var(--muted);

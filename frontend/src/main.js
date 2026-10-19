@@ -57,13 +57,15 @@ function isSSHPath(path) {
     return /^[^:\\/]{2,}:\//.test(path || '');
 }
 
-// SSH projects can only be opened by Trae CN. Their original action index
-// stays intact, so key 3 remains Trae CN while 1 and 2 are disabled.
+// SSH projects can only be opened by software carrying a remote command
+// template (the remoteArgs field on the Software List entry; seeded for the
+// Trae CN preset). Their original action index stays intact, so whichever
+// entries have remoteArgs keep their keys while the others are disabled.
 function availableActionIndexes(folderOrPath) {
     const path = typeof folderOrPath === 'string' ? folderOrPath : folderOrPath?.path;
     return software
         .map((sw, index) => ({ sw, index }))
-        .filter(({ sw }) => !isSSHPath(path) || sw.name.toLowerCase() === 'trae cn')
+        .filter(({ sw }) => !isSSHPath(path) || Array.isArray(sw.remoteArgs) && sw.remoteArgs.length > 0)
         .map(({ index }) => index);
 }
 

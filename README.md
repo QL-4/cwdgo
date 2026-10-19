@@ -70,6 +70,8 @@ cwdgo 是一个轻量、常驻的 **Windows 系统托盘应用**，把你碰过�
 
 PowerShell、你的编辑器、你的终端 —— 全都共享**同一份全局最近列表**，所以你在 VS Code 里打开的文件夹，在终端里也能立刻够到。
 
+SSH 项目（`host:/remote/path` 形式的条目）走同一套机制：给条目配置 `remoteArgs` 命令模板即可用它打开远程目录，`{sshUri}` 占位符会被替换为 `vscode-remote://` URI（VS Code 系编辑器的 `--folder-uri` 方案）。没有 `remoteArgs` 的条目对 SSH 项目不可用。
+
 ### 📋 输入路径，它会记住
 
 粘贴或输入一个完整路径然后按 `Enter` —— cwdgo 会**把它记录到历史顶部**（不弹资源管理器，面板保持打开），下次就是一个按键的距离。首次运行时历史为空？靠输入就能把它养起来。
@@ -92,7 +94,7 @@ PowerShell、你的编辑器、你的终端 —— 全都共享**同一份全局
 - **历史上限**（默认 50）—— 保持列表精简。
 - **开机自启**开关（默认关闭）。
 
-PowerShell 始终预置；Antigravity 与 Trae CN 在检测到安装时自动预置。
+PowerShell 始终预置；Antigravity、Trae CN 与 ZCode 在检测到安装时自动预置（Trae CN 自带 SSH 模板），检测到 Claude Desktop 执行别名时也会预置（经 `claude://code/new` 深度链接以 Code 模式打开）。
 
 ### 📌 常驻托盘
 

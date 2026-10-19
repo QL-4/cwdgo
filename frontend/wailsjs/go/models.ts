@@ -25,6 +25,7 @@ export namespace openactions {
 	    name: string;
 	    exe: string;
 	    args: string[];
+	    remoteArgs?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Software(source);
@@ -35,6 +36,7 @@ export namespace openactions {
 	        this.name = source["name"];
 	        this.exe = source["exe"];
 	        this.args = source["args"];
+	        this.remoteArgs = source["remoteArgs"];
 	    }
 	}
 
@@ -46,6 +48,7 @@ export namespace settings {
 	    name: string;
 	    exe: string;
 	    args: string[];
+	    remoteArgs?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Software(source);
@@ -56,6 +59,7 @@ export namespace settings {
 	        this.name = source["name"];
 	        this.exe = source["exe"];
 	        this.args = source["args"];
+	        this.remoteArgs = source["remoteArgs"];
 	    }
 	}
 	export class Settings {

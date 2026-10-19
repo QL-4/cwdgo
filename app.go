@@ -145,8 +145,9 @@ func (a *App) IsDirectory(path string) bool {
 	return openactions.IsExistingDir(path) || openactions.IsSSHFolder(path)
 }
 
-// Open opens a local folder in Explorer. SSH projects are opened in Trae CN
-// because Explorer cannot handle their remote target notation.
+// Open opens a local folder in Explorer. SSH projects are opened in the
+// first Software List entry with a remote command (remoteArgs) because
+// Explorer cannot handle their remote target notation.
 func (a *App) Open(folder string) error {
 	if openactions.IsSSHFolder(folder) {
 		entry, ok := a.store.Find(folder)
@@ -154,11 +155,11 @@ func (a *App) Open(folder string) error {
 			return fmt.Errorf("openactions: SSH project is not recorded: %s", folder)
 		}
 		for _, sw := range toActionSoftware(a.settings.Get().Software) {
-			if strings.EqualFold(sw.Name, "Trae CN") {
+			if sw.CanOpenSSH() {
 				return openactions.OpenSSHSoftware(folder, entry.Name(), sw, a.launcher, a.store)
 			}
 		}
-		return fmt.Errorf("openactions: Trae CN is not configured")
+		return fmt.Errorf("openactions: no software with a remote command (remoteArgs) is configured")
 	}
 	return openactions.Open(folder, a.launcher, a.store)
 }
@@ -180,16 +181,16 @@ func (a *App) GetSoftwareList() []openactions.Software {
 
 // OpenWith opens folder with the Software List entry at index (0-based, so
 // panel key 1 is index 0) and, on success, records it so it moves to the top
-// of Recent Folders. SSH projects may only be opened through Trae CN's
-// Remote SSH URI.
+// of Recent Folders. SSH projects may only be opened through an entry that
+// has a remote command template (remoteArgs).
 func (a *App) OpenWith(folder string, index int) error {
 	sw := toActionSoftware(a.settings.Get().Software)
 	if index < 0 || index >= len(sw) {
 		return fmt.Errorf("openactions: no software action at index %d", index)
 	}
 	if openactions.IsSSHFolder(folder) {
-		if !strings.EqualFold(sw[index].Name, "Trae CN") {
-			return fmt.Errorf("openactions: SSH projects can only be opened with Trae CN")
+		if !sw[index].CanOpenSSH() {
+			return fmt.Errorf("openactions: SSH projects can only be opened with software that has remoteArgs configured")
 		}
 		entry, ok := a.store.Find(folder)
 		if !ok {
@@ -249,10 +250,11 @@ func (a *App) AddSoftware(name, exe string, args []string) error {
 
 // UpdateSoftware replaces the Software List entry at index with the given
 // fields. It returns an error if index is out of range or the new fields are
-// invalid.
+// invalid. The form edits display/launch fields only, so the entry's
+// RemoteArgs template is carried over — renames must never change behaviour.
 func (a *App) UpdateSoftware(index int, name, exe string, args []string) error {
 	return a.mutateSoftware(func(list []settings.Software) []settings.Software {
-		list[index] = settings.Software{Name: name, Exe: exe, Args: args}
+		list[index] = settings.Software{Name: name, Exe: exe, Args: args, RemoteArgs: list[index].RemoteArgs}
 		return list
 	})
 }
@@ -292,7 +294,7 @@ func toActionSoftware(in []settings.Software) []openactions.Software {
 		if args == nil {
 			args = []string{}
 		}
-		out = append(out, openactions.Software{Name: s.Name, Exe: s.Exe, Args: args})
+		out = append(out, openactions.Software{Name: s.Name, Exe: s.Exe, Args: args, RemoteArgs: s.RemoteArgs})
 	}
 	return out
 }
@@ -307,11 +309,13 @@ func (a *App) Quit() {
 
 // defaultSoftware builds the preset Software List: PowerShell is always
 // available on Windows (opened with -NoExit so the shell stays open in the
-// folder); Antigravity and Trae CN are included only when their Start Menu
-// shortcut resolves to an installed executable, so any install drive/folder
-// is handled. This is platform glue (shortcut resolution / PATH probing)
-// and is not unit-tested — the Software command construction and the
-// launch/record path it feeds are tested in domain/openactions.
+// folder); Antigravity, Trae CN and ZCode are included only when their Start
+// Menu shortcut resolves to an installed executable, so any install
+// drive/folder is handled; Claude Desktop is included when its execution
+// alias resolves (see claudeDesktopExe). This is platform glue (shortcut
+// resolution / PATH probing) and is not unit-tested — the Software command
+// construction and the launch/record path it feeds are tested in
+// domain/openactions.
 func defaultSoftware() []settings.Software {
 	out := []settings.Software{}
 	if exeAvailable("powershell.exe") {
@@ -324,10 +328,46 @@ func defaultSoftware() []settings.Software {
 	presets := launcher.ResolvePresets()
 	for _, p := range launcher.Presets {
 		if exe, ok := presets[p.Name]; ok {
-			out = append(out, settings.Software{Name: p.Name, Exe: exe})
+			out = append(out, settings.Software{Name: p.Name, Exe: exe, RemoteArgs: p.RemoteArgs})
 		}
 	}
+	if exe := claudeDesktopExe(); exe != "" {
+		out = append(out, settings.Software{
+			Name: "Claude",
+			Exe:  "powershell.exe",
+			Args: []string{"-NoProfile", "-Command", claudeCodeOpen},
+		})
+	}
 	return out
+}
+
+// claudeCodeOpen is the PowerShell snippet that opens Claude Desktop in Code
+// mode at the selected folder. claude-desktop.exe cannot select the mode on
+// its command line (path arguments always land on the Cowork home), so the
+// launch goes through the claude://code/new deep link; the folder is
+// URL-encoded because it is a query parameter. Claude Desktop always asks
+// the user to confirm a folder received through a link.
+const claudeCodeOpen = "Start-Process ('claude://code/new?folder=' + [uri]::EscapeDataString('{folder}'))"
+
+// claudeDesktopExe reports Claude Desktop's execution alias path, or "" when
+// it is not installed. Claude installs as an MSIX package, so it has no
+// Start Menu .lnk for ResolvePresets and its package folder is version-
+// pinned; the claude-desktop.exe execution alias is the stable install
+// marker because Windows keeps it pointing at the current package across
+// updates. The alias is probed via PATH first, then via its default
+// location (%LOCALAPPDATA%\Microsoft\WindowsApps), since that folder is not
+// always on PATH. The alias is not used to launch the app — Code mode needs
+// the claude:// deep link (see claudeCodeOpen).
+func claudeDesktopExe() string {
+	if exeAvailable("claude-desktop.exe") {
+		return "claude-desktop.exe"
+	}
+	if root := os.Getenv("LOCALAPPDATA"); root != "" {
+		if alias := filepath.Join(root, "Microsoft", "WindowsApps", "claude-desktop.exe"); exeAvailable(alias) {
+			return alias
+		}
+	}
+	return ""
 }
 
 // exeAvailable reports whether an executable is reachable: a bare name is

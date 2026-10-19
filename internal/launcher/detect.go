@@ -12,15 +12,20 @@ import (
 	"time"
 	"unicode/utf16"
 
+	"cwdgo/domain/openactions"
 	"cwdgo/internal/applog"
 )
 
 // PresetApp is a preset IDE the panel offers as a numbered action when found
 // installed. Link is the Start Menu shortcut name (without .lnk) to look for;
-// Name is the display name shown on its action badge.
+// Name is the display name shown on its action badge. RemoteArgs seeds the
+// persisted Software entry's remote command template — its presence marks
+// the entry able to open SSH Remote projects (the VS Code-family
+// --folder-uri scheme). Display names never drive launch logic.
 type PresetApp struct {
-	Name string
-	Link string
+	Name       string
+	Link       string
+	RemoteArgs []string
 }
 
 // Presets is the ordered list of IDE presets to detect. PowerShell is handled
@@ -28,7 +33,8 @@ type PresetApp struct {
 // fixes the key binding after PowerShell: index 0 → key 2, etc.
 var Presets = []PresetApp{
 	{Name: "Antigravity", Link: "Antigravity"},
-	{Name: "Trae CN", Link: "Trae CN"},
+	{Name: "Trae CN", Link: "Trae CN", RemoteArgs: []string{"--folder-uri", openactions.SSHURIPlaceholder}},
+	{Name: "ZCode", Link: "ZCode"},
 }
 
 // ResolvePresets scans the Start Menu Programs folders (user and all-users)

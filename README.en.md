@@ -70,6 +70,8 @@ Each folder in the list carries numbered badges for your **Software List**. Hit 
 
 PowerShell, your editor, your terminal — all share the **same global recent-list**, so the folder you opened in VS Code is instantly reachable from your terminal too.
 
+SSH projects (entries in `host:/remote/path` form) use the same mechanism: give an entry a `remoteArgs` command template and it can open remote directories, with the `{sshUri}` placeholder replaced by the `vscode-remote://` URI (the `--folder-uri` scheme of VS Code-family editors). Entries without `remoteArgs` are unavailable for SSH projects.
+
 ### 📋 Type a path, it remembers
 
 Paste or type a full path and press `Enter` — cwdgo **records it to the top of your history** (no Explorer popup, panel stays open) so it's one keystroke away next time. Empty history on first run? You just bootstrap it by typing.
@@ -92,7 +94,7 @@ A built-in settings panel (no save button — everything auto-persists):
 - **History cap** (default 50) — keeps the list lean.
 - **Start with Windows** toggle (off by default).
 
-PowerShell is preloaded always; Antigravity & Trae CN are auto-detected and preloaded when installed.
+PowerShell is preloaded always; Antigravity, Trae CN and ZCode are auto-detected and preloaded when installed (Trae CN ships with the SSH template), and Claude Desktop is preloaded when its execution alias is detected (opened in Code mode via the `claude://code/new` deep link).
 
 ### 📌 Lives in your tray
 
