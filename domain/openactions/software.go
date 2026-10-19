@@ -27,14 +27,20 @@ type Software struct {
 }
 
 // FolderPlaceholder, when present in any arg, is replaced with the folder
-// path. When no arg contains it the folder is appended as the final
-// argument, so an app that takes the folder positionally (most IDEs) needs
-// no args at all. This lets both `pwsh ... Set-Location '{folder}'` and
-// `code <folder>` be expressed by one rule.
-const FolderPlaceholder = "{folder}"
+// path; FolderURIPlaceholder is replaced with the same path URL-query-
+// encoded, for args that pass the folder inside a URL such as a deep link.
+// When no arg contains either placeholder the folder is appended as the
+// final argument, so an app that takes the folder positionally (most IDEs)
+// needs no args at all. This lets `pwsh ... Set-Location '{folder}'`,
+// `code <folder>` and `app.exe "scheme://open?path={folderUri}"` all be
+// expressed by one rule.
+const (
+	FolderPlaceholder    = "{folder}"
+	FolderURIPlaceholder = "{folderUri}"
+)
 
-// SSHURIPlaceholder is RemoteArgs' counterpart of FolderPlaceholder: any
-// element containing it is replaced with the vscode-remote:// URI
+// SSHURIPlaceholder is RemoteArgs' counterpart of the folder placeholders:
+// any element containing it is replaced with the vscode-remote:// URI
 // SSHFolderURI builds for the target, and when no element carries it the
 // URI is appended as the final argument — so ["--folder-uri"] alone is
 // already a complete template.
@@ -48,7 +54,20 @@ func (s Software) CanOpenSSH() bool { return len(s.RemoteArgs) > 0 }
 // is a pure function: same input always yields the same command, with no
 // side effects.
 func (s Software) Command(folder string) (name string, args []string) {
-	return s.Exe, applyPlaceholder(s.Args, FolderPlaceholder, folder)
+	out := make([]string, 0, len(s.Args)+1)
+	placed := false
+	for _, a := range s.Args {
+		if strings.Contains(a, FolderPlaceholder) || strings.Contains(a, FolderURIPlaceholder) {
+			placed = true
+			a = strings.ReplaceAll(a, FolderURIPlaceholder, url.QueryEscape(folder))
+			a = strings.ReplaceAll(a, FolderPlaceholder, folder)
+		}
+		out = append(out, a)
+	}
+	if !placed {
+		out = append(out, folder)
+	}
+	return s.Exe, out
 }
 
 // applyPlaceholder returns template with every element's placeholder

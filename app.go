@@ -333,35 +333,39 @@ func defaultSoftware() []settings.Software {
 			continue
 		}
 		if p.FolderLink != "" {
-			// FolderLink presets open workspaces through a deep link:
-			// PowerShell appends the URL-encoded folder after the prefix,
-			// because a raw Windows path would break on &/# in the query.
+			// FolderLink presets open workspaces through a deep link: the
+			// link prefix plus the URL-encoded folder is passed directly to
+			// the resolved exe (ZCode's single-instance handoff drops
+			// positional paths but honors its zcode:// deep link), so no
+			// console-hosting wrapper is involved.
 			out = append(out, settings.Software{
 				Name: p.Name,
-				Exe:  "powershell.exe",
-				Args: []string{"-NoProfile", "-Command", "& '" + exe + "' ('" + p.FolderLink + "' + [uri]::EscapeDataString('{folder}'))"},
+				Exe:  exe,
+				Args: []string{p.FolderLink + openactions.FolderURIPlaceholder},
 			})
 			continue
 		}
 		out = append(out, settings.Software{Name: p.Name, Exe: exe, RemoteArgs: p.RemoteArgs})
 	}
-	if exe := claudeDesktopExe(); exe != "" {
+	if claudeDesktopExe() != "" {
 		out = append(out, settings.Software{
 			Name: "Claude",
-			Exe:  "powershell.exe",
-			Args: []string{"-NoProfile", "-Command", claudeCodeOpen},
+			Exe:  "rundll32.exe",
+			Args: []string{"url.dll,FileProtocolHandler", claudeCodeLink + openactions.FolderURIPlaceholder},
 		})
 	}
 	return out
 }
 
-// claudeCodeOpen is the PowerShell snippet that opens Claude Desktop in Code
-// mode at the selected folder. claude-desktop.exe cannot select the mode on
-// its command line (path arguments always land on the Cowork home), so the
-// launch goes through the claude://code/new deep link; the folder is
-// URL-encoded because it is a query parameter. Claude Desktop always asks
-// the user to confirm a folder received through a link.
-const claudeCodeOpen = "Start-Process ('claude://code/new?folder=' + [uri]::EscapeDataString('{folder}'))"
+// claudeCodeLink is the deep link that opens Claude Desktop in Code mode
+// with the folder as the working directory; the folder is appended
+// URL-encoded as the link's query parameter (FolderURIPlaceholder).
+// claude-desktop.exe cannot select the mode on its command line (path
+// arguments always land on the Cowork home), and rundll32's
+// url.dll,FileProtocolHandler activates the claude:// protocol without a
+// console window. Claude Desktop always asks the user to confirm a folder
+// received through a link.
+const claudeCodeLink = "claude://code/new?folder="
 
 // claudeDesktopExe reports Claude Desktop's execution alias path, or "" when
 // it is not installed. Claude installs as an MSIX package, so it has no
@@ -371,7 +375,7 @@ const claudeCodeOpen = "Start-Process ('claude://code/new?folder=' + [uri]::Esca
 // updates. The alias is probed via PATH first, then via its default
 // location (%LOCALAPPDATA%\Microsoft\WindowsApps), since that folder is not
 // always on PATH. The alias is not used to launch the app — Code mode needs
-// the claude:// deep link (see claudeCodeOpen).
+// the claude:// deep link (see claudeCodeLink).
 func claudeDesktopExe() string {
 	if exeAvailable("claude-desktop.exe") {
 		return "claude-desktop.exe"

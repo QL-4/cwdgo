@@ -2,6 +2,7 @@ package openactions_test
 
 import (
 	"errors"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -48,6 +49,22 @@ func TestSoftwareCommandArgsWithoutPlaceholderAppendFolder(t *testing.T) {
 	want := []string{"-n", `D:\foo`}
 	if !equalArgs(args, want) {
 		t.Fatalf("args = %v, want %v", args, want)
+	}
+}
+
+func TestSoftwareCommandURIPlaceholderIsQueryEscaped(t *testing.T) {
+	sw := openactions.Software{
+		Exe:  `C:\Programs\ZCode\ZCode.exe`,
+		Args: []string{"zcode://workspace/open?path={folderUri}"},
+	}
+	_, args := sw.Command(`D:\My Projects\foo&bar`)
+	want := []string{"zcode://workspace/open?path=" + url.QueryEscape(`D:\My Projects\foo&bar`)}
+	if !equalArgs(args, want) {
+		t.Fatalf("args = %v, want %v", args, want)
+	}
+	// the folder must not also be appended positionally
+	if len(args) != 1 {
+		t.Fatalf("got %d args, want 1 (no duplicate folder append)", len(args))
 	}
 }
 
