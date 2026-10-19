@@ -311,10 +311,11 @@ func (a *App) Quit() {
 // available on Windows (opened with -NoExit so the shell stays open in the
 // folder); Antigravity, Trae CN and ZCode are included only when their Start
 // Menu shortcut resolves to an installed executable, so any install
-// drive/folder is handled; Claude Desktop is included when its execution
-// alias resolves (see claudeDesktopExe). This is platform glue (shortcut
-// resolution / PATH probing) and is not unit-tested — the Software command
-// construction and the launch/record path it feeds are tested in
+// drive/folder is handled (ZCode opens workspaces through its zcode:// deep
+// link — see PresetApp.FolderLink); Claude Desktop is included when its
+// execution alias resolves (see claudeDesktopExe). This is platform glue
+// (shortcut resolution / PATH probing) and is not unit-tested — the Software
+// command construction and the launch/record path it feeds are tested in
 // domain/openactions.
 func defaultSoftware() []settings.Software {
 	out := []settings.Software{}
@@ -327,9 +328,22 @@ func defaultSoftware() []settings.Software {
 	}
 	presets := launcher.ResolvePresets()
 	for _, p := range launcher.Presets {
-		if exe, ok := presets[p.Name]; ok {
-			out = append(out, settings.Software{Name: p.Name, Exe: exe, RemoteArgs: p.RemoteArgs})
+		exe, ok := presets[p.Name]
+		if !ok {
+			continue
 		}
+		if p.FolderLink != "" {
+			// FolderLink presets open workspaces through a deep link:
+			// PowerShell appends the URL-encoded folder after the prefix,
+			// because a raw Windows path would break on &/# in the query.
+			out = append(out, settings.Software{
+				Name: p.Name,
+				Exe:  "powershell.exe",
+				Args: []string{"-NoProfile", "-Command", "& '" + exe + "' ('" + p.FolderLink + "' + [uri]::EscapeDataString('{folder}'))"},
+			})
+			continue
+		}
+		out = append(out, settings.Software{Name: p.Name, Exe: exe, RemoteArgs: p.RemoteArgs})
 	}
 	if exe := claudeDesktopExe(); exe != "" {
 		out = append(out, settings.Software{

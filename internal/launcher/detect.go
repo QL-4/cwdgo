@@ -21,11 +21,16 @@ import (
 // Name is the display name shown on its action badge. RemoteArgs seeds the
 // persisted Software entry's remote command template — its presence marks
 // the entry able to open SSH Remote projects (the VS Code-family
-// --folder-uri scheme). Display names never drive launch logic.
+// --folder-uri scheme). FolderLink, when set, is a deep-link prefix the app
+// opens workspaces through instead of taking the folder as a positional
+// argument (ZCode's single-instance handoff drops positional arguments, but
+// its zcode://workspace/open?path= deep link works). Display names never
+// drive launch logic.
 type PresetApp struct {
 	Name       string
 	Link       string
 	RemoteArgs []string
+	FolderLink string
 }
 
 // Presets is the ordered list of IDE presets to detect. PowerShell is handled
@@ -34,7 +39,7 @@ type PresetApp struct {
 var Presets = []PresetApp{
 	{Name: "Antigravity", Link: "Antigravity"},
 	{Name: "Trae CN", Link: "Trae CN", RemoteArgs: []string{"--folder-uri", openactions.SSHURIPlaceholder}},
-	{Name: "ZCode", Link: "ZCode"},
+	{Name: "ZCode", Link: "ZCode", FolderLink: "zcode://workspace/open?path="},
 }
 
 // ResolvePresets scans the Start Menu Programs folders (user and all-users)
