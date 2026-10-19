@@ -73,24 +73,65 @@ func equalArgs(got, want []string) bool {
 }
 
 func TestSSHFolderURI(t *testing.T) {
-	got, err := openactions.SSHFolderURI(`203.0.113.10:/home/server-a/QL`, "server-a")
+	got, err := openactions.SSHFolderURI(`203.0.113.10:/home/server-a/project`, "server-a")
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "vscode-remote://ssh-remote%2B7b22686f73744e616d65223a226265697368696461222c2266726f6d436f6e666967223a747275657d/home/server-a/QL"
+	want := "vscode-remote://ssh-remote%2B7b22686f73744e616d65223a227365727665722d61222c2266726f6d436f6e666967223a747275657d/home/server-a/project"
 	if got != want {
 		t.Fatalf("SSHFolderURI() = %q, want %q", got, want)
 	}
 }
 
 func TestRemoteCommandUsesFolderURI(t *testing.T) {
-	sw := openactions.Software{Exe: `D:\Programs\Trae CN\Trae CN.exe`}
-	name, args, err := sw.RemoteCommand(`203.0.113.10:/home/server-a/QL`, "server-a")
+	sw := openactions.Software{
+		Exe:        `D:\Programs\Trae CN\Trae CN.exe`,
+		RemoteArgs: []string{"--folder-uri", openactions.SSHURIPlaceholder},
+	}
+	name, args, err := sw.RemoteCommand(`203.0.113.10:/home/server-a/project`, "server-a")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if name != sw.Exe || len(args) != 2 || args[0] != "--folder-uri" || !strings.Contains(args[1], "/home/server-a/QL") {
+	if name != sw.Exe || len(args) != 2 || args[0] != "--folder-uri" || !strings.Contains(args[1], "/home/server-a/project") {
 		t.Fatalf("RemoteCommand() = %q %v", name, args)
+	}
+}
+
+func TestRemoteCommandAppendsURIWhenNoPlaceholder(t *testing.T) {
+	sw := openactions.Software{Exe: "code", RemoteArgs: []string{"--folder-uri"}}
+	_, args, err := sw.RemoteCommand(`203.0.113.10:/home/server-a/project`, "server-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(args) != 2 || args[0] != "--folder-uri" || !strings.Contains(args[1], "vscode-remote://") {
+		t.Fatalf("RemoteCommand() args = %v, want URI appended after --folder-uri", args)
+	}
+}
+
+func TestRemoteCommandWithoutRemoteArgsErrors(t *testing.T) {
+	sw := openactions.Software{Exe: "code"}
+	if _, _, err := sw.RemoteCommand(`203.0.113.10:/home/server-a/project`, "server-a"); err == nil {
+		t.Fatal("want error for SSH target without RemoteArgs, got nil")
+	}
+}
+
+func TestRemoteCommandLocalFolderUsesCommand(t *testing.T) {
+	sw := openactions.Software{Exe: "code"}
+	_, args, err := sw.RemoteCommand(`D:\foo`, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{`D:\foo`}; !equalArgs(args, want) {
+		t.Fatalf("args = %v, want %v (local folders need no RemoteArgs)", args, want)
+	}
+}
+
+func TestCanOpenSSHRequiresRemoteArgs(t *testing.T) {
+	if (openactions.Software{Exe: "code", Name: "Trae"}).CanOpenSSH() {
+		t.Fatal("entry without RemoteArgs must not be SSH-capable, whatever its name")
+	}
+	if !(openactions.Software{Exe: "code", RemoteArgs: []string{"--folder-uri"}}).CanOpenSSH() {
+		t.Fatal("entry with RemoteArgs must be SSH-capable")
 	}
 }
 
@@ -141,10 +182,13 @@ func TestOpenSoftwarePlaceholderCommandIsLaunched(t *testing.T) {
 }
 
 func TestOpenSSHSoftwareLaunchesRemoteURIAndRecords(t *testing.T) {
-	sw := openactions.Software{Exe: `D:\Programs\Trae CN\Trae CN.exe`}
+	sw := openactions.Software{
+		Exe:        `D:\Programs\Trae CN\Trae CN.exe`,
+		RemoteArgs: []string{"--folder-uri", openactions.SSHURIPlaceholder},
+	}
 	var ln fakeLauncher
 	var rec fakeRecorder
-	const target = `203.0.113.10:/home/server-a/QL`
+	const target = `203.0.113.10:/home/server-a/project`
 	if err := openactions.OpenSSHSoftware(target, "server-a", sw, &ln, &rec); err != nil {
 		t.Fatal(err)
 	}

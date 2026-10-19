@@ -40,6 +40,9 @@ func assertSettingsEqual(t *testing.T, got, want settings.Settings) {
 		if got.Software[i].Name != want.Software[i].Name || got.Software[i].Exe != want.Software[i].Exe {
 			t.Fatalf("Software[%d] = %+v, want %+v", i, got.Software[i], want.Software[i])
 		}
+		if !equalStrings(got.Software[i].RemoteArgs, want.Software[i].RemoteArgs) {
+			t.Fatalf("Software[%d].RemoteArgs = %v, want %v", i, got.Software[i].RemoteArgs, want.Software[i].RemoteArgs)
+		}
 		if len(got.Software[i].Args) != len(want.Software[i].Args) {
 			t.Fatalf("Software[%d].Args len = %d, want %d", i, len(got.Software[i].Args), len(want.Software[i].Args))
 		}
@@ -51,6 +54,20 @@ func assertSettingsEqual(t *testing.T, got, want settings.Settings) {
 	}
 }
 
+// equalStrings compares two string slices element-wise; nil and empty are
+// equal so an omitted optional field round-trips.
+func equalStrings(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func TestNewWithMissingFileReturnsDefaults(t *testing.T) {
 	s := settings.New(filepath.Join(t.TempDir(), "nope.json"))
 	assertSettingsEqual(t, s.Get(), settings.Defaults())
@@ -60,6 +77,9 @@ func TestUpdatePersistsAndRoundTrips(t *testing.T) {
 	s, p := newStore(t)
 	want := settings.Settings{HistoryLimit: 25, AutoStart: true, Software: []settings.Software{
 		{Name: "PowerShell", Exe: "powershell.exe", Args: []string{"-NoExit"}},
+		// RemoteArgs must survive persistence: its presence IS the SSH
+		// capability, while the display name is free-form.
+		{Name: "Trae", Exe: `D:\Programs\Trae CN\Trae CN.exe`, RemoteArgs: []string{"--folder-uri", "{sshUri}"}},
 	}}
 	if err := s.Update(want); err != nil {
 		t.Fatalf("Update: %v", err)

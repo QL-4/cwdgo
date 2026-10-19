@@ -31,6 +31,11 @@ type Software struct {
 	Name string   `json:"name"`
 	Exe  string   `json:"exe"`
 	Args []string `json:"args"`
+	// RemoteArgs is the command template for opening SSH projects
+	// (host:/remote/path targets). Its presence IS the capability — Name
+	// is display-only and never decides behaviour. Nil/empty means the
+	// entry cannot open SSH projects.
+	RemoteArgs []string `json:"remoteArgs,omitempty"`
 }
 
 // Settings is the full, persisted configuration. Update replaces it
