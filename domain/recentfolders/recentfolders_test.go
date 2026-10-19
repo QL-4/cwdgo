@@ -85,7 +85,7 @@ func TestRecordNormalizesSeparatorsAndTrailingSlash(t *testing.T) {
 
 func TestRecordNamedPreservesSSHProject(t *testing.T) {
 	s, path := newStore(t)
-	const target = `203.0.113.10:/home/server-a/QL`
+	const target = `203.0.113.10:/home/server-a/project`
 	if err := s.RecordNamed(target, "server-a"); err != nil {
 		t.Fatal(err)
 	}
