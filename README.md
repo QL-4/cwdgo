@@ -94,7 +94,7 @@ SSH 项目（`host:/remote/path` 形式的条目）走同一套机制：给条�
 - **历史上限**（默认 50）—— 保持列表精简。
 - **开机自启**开关（默认关闭）。
 
-PowerShell 始终预置；Antigravity、Trae CN 与 ZCode 在检测到安装时自动预置（Trae CN 自带 SSH 模板；ZCode 经 `zcode://workspace/open` 深度链接打开工作区），检测到 Claude Desktop 执行别名时也会预置（经 `claude://code/new` 深度链接以 Code 模式打开）。
+PowerShell 始终预置；Antigravity、Trae CN 与 ZCode 在检测到安装时自动预置（Trae CN 自带 SSH 模板；ZCode 以 `--open-workspace` 打开工作区，与资源管理器右键菜单同款命令），检测到 Claude Desktop 执行别名时也会预置（经 `claude://code/new` 深度链接以 Code 模式打开）。
 
 ### 📌 常驻托盘
 

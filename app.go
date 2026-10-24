@@ -311,11 +311,11 @@ func (a *App) Quit() {
 // available on Windows (opened with -NoExit so the shell stays open in the
 // folder); Antigravity, Trae CN and ZCode are included only when their Start
 // Menu shortcut resolves to an installed executable, so any install
-// drive/folder is handled (ZCode opens workspaces through its zcode:// deep
-// link — see PresetApp.FolderLink); Claude Desktop is included when its
-// execution alias resolves (see claudeDesktopExe). This is platform glue
-// (shortcut resolution / PATH probing) and is not unit-tested — the Software
-// command construction and the launch/record path it feeds are tested in
+// drive/folder is handled (ZCode opens workspaces via --open-workspace —
+// see PresetApp.Args); Claude Desktop is included when its execution alias
+// resolves (see claudeDesktopExe). This is platform glue (shortcut
+// resolution / PATH probing) and is not unit-tested — the Software command
+// construction and the launch/record path it feeds are tested in
 // domain/openactions.
 func defaultSoftware() []settings.Software {
 	out := []settings.Software{}
@@ -332,20 +332,7 @@ func defaultSoftware() []settings.Software {
 		if !ok {
 			continue
 		}
-		if p.FolderLink != "" {
-			// FolderLink presets open workspaces through a deep link: the
-			// link prefix plus the URL-encoded folder is passed directly to
-			// the resolved exe (ZCode's single-instance handoff drops
-			// positional paths but honors its zcode:// deep link), so no
-			// console-hosting wrapper is involved.
-			out = append(out, settings.Software{
-				Name: p.Name,
-				Exe:  exe,
-				Args: []string{p.FolderLink + openactions.FolderURIPlaceholder},
-			})
-			continue
-		}
-		out = append(out, settings.Software{Name: p.Name, Exe: exe, RemoteArgs: p.RemoteArgs})
+		out = append(out, settings.Software{Name: p.Name, Exe: exe, Args: p.Args, RemoteArgs: p.RemoteArgs})
 	}
 	if claudeDesktopExe() != "" {
 		out = append(out, settings.Software{

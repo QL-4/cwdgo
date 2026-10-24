@@ -94,7 +94,7 @@ A built-in settings panel (no save button — everything auto-persists):
 - **History cap** (default 50) — keeps the list lean.
 - **Start with Windows** toggle (off by default).
 
-PowerShell is preloaded always; Antigravity, Trae CN and ZCode are auto-detected and preloaded when installed (Trae CN ships with the SSH template; ZCode opens workspaces via its `zcode://workspace/open` deep link), and Claude Desktop is preloaded when its execution alias is detected (opened in Code mode via the `claude://code/new` deep link).
+PowerShell is preloaded always; Antigravity, Trae CN and ZCode are auto-detected and preloaded when installed (Trae CN ships with the SSH template; ZCode opens workspaces via `--open-workspace`, the same command its Explorer context-menu verb uses), and Claude Desktop is preloaded when its execution alias is detected (opened in Code mode via the `claude://code/new` deep link).
 
 ### 📌 Lives in your tray
 
